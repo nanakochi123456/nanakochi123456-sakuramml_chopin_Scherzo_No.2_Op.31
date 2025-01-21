@@ -49,3 +49,11 @@ https://www.nicovideo.jp/watch/sm38378277
 ■謝辞■
 
 素晴らしいフリーのサウンドフォントを作成されたKeppy氏並びにプロジェクトに参画された方、またその他の方にお礼を申し上げます
+
+その他以下のサウンドフォントを使用しています
+
+https://github.com/tongxunlu/Steinway-D-274
+
+https://github.com/KaleidonKep99/Steinway-B-211
+
+https://musical-artifacts.com/artifacts/2524
