@@ -1,0 +1,5096 @@
+// ショパンスケルツォ第2番変ロ短調作品31
+////////////////////////////////////////
+
+ 
+/////////////////////////////////////////////////////// 
+// tokoroten.h 
+/////////////////////////////////////////////////////// 
+ 
+Int DY=0			// 1にするとダイナミックレンジを小さくする
+Int TWM2=0			// TWM2用
+Int MSGS=1			// Microsoft GS、TiMidity++
+Int IGNORETEMPO=0	// テンポを変化させない
+//Tempo 400			// ＜テンポ固定にしてみてます。IGNORETEMPO=1 の場合のみ
+Int TEMPODIFF=0		// ベーステンポの調整（-15より下を設定しないでください。平均BPM260、最少BPM20、最大BPM500）
+Int KEY=0			// 移調　＜ついでに移調も -にすると鳴らない音があります。
+Int DEBUG=0
+
+拍子 3,4
+
+#PEDALON={Sub {r24y64,127}}
+#PEDALOFF={r-46 y64,0 r46}
+
+IF(TWM2=1) {
+	ResetGS
+	TINY=1
+}
+IF(MSGS=1) {
+	ResetGS
+}
+
+System.TimeBase=96
+
+Int DB=0
+IF(DEBUG=1) {
+	//#DEBUGMML1={Sub{@1v90V(127)'v90o5do6fo7a#o8d'}}
+	//#DEBUGMML2={Sub{@1v90V(127)'v90o5co6eo7g#o8c'}}
+	//#DEBUGMML3={Sub{@1v127V(127)'v127o4cdefgabo6cdefgab'}}
+	TR(10)
+		$M{n(MetronomeBell),}
+		$m{n(MetronomeClick),}
+		[1000
+			Rythm{M4m4m4}
+		]
+}
+Function TmpChangeR(tempo, len) {
+	IF(len=0) {
+		IF(DEBUG=1) {
+
+			#DEBUGMML1
+		}
+		IF(!(IGNORETEMPO<>1)) {
+			Tempo=tempo+TEMPODIFF
+		}
+	} ELSE {
+		TmpChange(tempo, len)
+		IF(DEBUG=1) {
+			#DEBUGMML2
+			r%(len)
+		} ELSE {
+			r%(len)
+		}
+	}
+}
+
+Function TmpChange(tempo, len) {
+	IF(len=0) {
+		IF(!(IGNORETEMPO<>1)) {
+			Tempo=tempo+TEMPODIFF
+		}
+	} ELSE {
+		IF(!(IGNORETEMPO<>1)) {
+			Int TT1=Tempo
+			Int TT2=tempo+TEMPODIFF
+			Int TTDIFF=(TT2 - TT1)
+			Int TTSTEP=TTDIFF
+			IF(TTSTEP < 0) {
+				TTSTEP=-TTDIFF
+			}
+			Int TTR=len / TTSTEP
+			For(Int I=1; I < TTSTEP; I++) {
+				Sub {
+					r%(I*TTR)
+					IF(TTDIFF < 0) {
+						TT1 = TT1 - 1;
+					} ELSE {
+						TT1 = TT1 + 1;
+					}
+					Tempo = TT1;
+				}
+			}
+			Sub{
+				r%(len)
+				Tempo=tempo+TEMPODIFF
+			}
+		}
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// title:        "rnd.h" ver 1.00
+// description:  単音、和音、ドラムをランダムな音量とタイミングで演奏するインクルードファイル(2017/02/06)
+// keywords:     SAKURA Function     by ななこっち★ @nanonano773
+// License:      GPL3
+///////////////////////////////////////////////////////////////////////////////
+// rnd.h メロディー、和音、ドラムをランダムなタイミングで演奏する
+///////////////////////////////////////////////////////////////////////////////
+// 詳細の取扱説明書は、ファイル下部へ
+//
+// Function RMDINIT(rmin, rmax, vmin, vmax)
+// 休符乱数値の最小値、最大値、最小、最大音量設定する。両方0にすると、同一タイミングで演奏します。
+// 
+// Function RMDR(rmin, rmax)
+// 休符乱数値の最小値、最大値の設定のみする
+//
+// Function RNDV(rmin, rmax)
+// 音量乱数値の最小値、最大値の設定のみする。
+// 同一の値を設定を両方に行うと、固定音量となる。
+// rmaxを省略すると、rmin、rmax共に加算、または減算を行なう
+//
+// rmin, rmaxは与える休符値、vmin, vmaxは与える音量値
+// Function RMD(mml)
+// ランダムに演奏したいメロディーのMMLを入力する
+// Function RMDENABLE(1 or 0)
+// メロディーランダム演奏機能を有効/無効にする
+///////////////////////////////////////////////////////////////////////////////
+// Function RCDINIT(rmin,rmax,vmin,vmax,vdif)
+// 乱数値の最小値、最大値を設定する。両方0にすると、同一タイミングで演奏します。
+// vmin,vmaxは音量の最小値、最大値
+// vdifは音量増加値(マイナス値を指定すると減少値)
+//
+// Function RCD(mml)
+// ランダムに演奏したい和音のMMLを入力する
+// Function RCOT(mml)
+// ランダムに演奏したい単音のMMLを入力すると、オクターブで演奏する。
+// Function RCDENABLE(1 or 0)
+// 和音ランダム演奏機能を有効/無効にする
+// Function RCDR(rmin, rmax)
+// Function RCDV(vmin, vmax)
+//
+// RCDをSRCDに置き換えた同名関数があります。ケースバイケースで使い分けられます。
+//
+// RDINIT(ドラム音量,randvフラグ,randrフラグ,BDロテートフラグ,SDロテートフラグ,シンバルロテートフラグ)
+// RDV(Int V)
+// RDCresc(Int V)
+// RandV(Int MIN, Int MAX)
+// RandR(Int MIN, Int MAX)
+// SyncR()
+// #RDRUMSET1
+///////////////////////////////////////////////////////////////////////////////
+// Example
+// TR(1)
+//   RMDINIT(53,513,90,110)
+//   l4 RMD(ceg)
+//   RMDV(5)
+//   l8 RMD(<b>fg)
+//   RMDV(-5)
+//   l8 RMD(ceg)
+// TR(2)
+//   RCDINIT(53,513)
+//   l4 RCD(ceg)
+//   l8 RCD(<b>fg)
+//   RCDINIT(53,513,90,100)
+//   l8 RCD(ceg)
+// TR(10)
+//   RDINIT(110,1,1,1,1,1)
+//   #RDRUMSET1
+//   l8 [4 Rythm {'bh'h'sh''bh''bh'h'sh'h}]
+///////////////////////////////////////////////////////////////////////////////
+
+Int RMD_RMIN=192
+Int RMD_RMAX=768
+Int RMD_VMIN=95
+Int RMD_VMAX=100
+Int RMD_CRESC=0
+Int RMD_ENABLE=1
+
+Int RCD_MIN=192
+Int RCD_MAX=768
+Int RCD_VMIN=-1
+Int RCD_VMAX=-1
+Int RCD_CRESC=0
+Int RCD_TMIN=-1
+Int RCD_TMAX=-1
+Int RCD_ENABLE=1
+
+Int SRCD_MIN=192
+Int SRCD_MAX=768
+Int SRCD_VMIN=-1
+Int SRCD_VMAX=-1
+Int SRCD_CRESC=0
+Int SRCD_TMIN=-1
+Int SRCD_TMAX=-1
+Int SRCD_ENABLE=1
+
+Int BDROTATE=0
+Int SDROTATE=0
+Int CYMROTATE=0
+
+Int BDINIT=0
+Int CYMINIT=0
+Int SDINIT=0
+
+Int RANDV=0
+Int RANDR=0
+
+Int RDVOL=127
+
+Function RMDENABLE(Int FLG) {
+	RMD_ENABLE=FLG
+}
+
+Function RMDINIT(Int RMIN, Int RMAX, Int VMIN, Int VMAX) {
+	RMD_RMIN=RMIN
+	RMD_RMAX=RMAX
+	RMD_VMIN=VMIN
+	RMD_VMAX=VMAX
+	RMD_CRESC=0
+}
+
+Function RMDCresc(Str STEP) {
+	RMD_CRESC=STEP
+}
+
+Function RMDR(Int RMIN, Int RMAX) {
+	RMD_RMIN=RMIN
+	RMD_RMAX=RMAX
+}
+
+Function RMDV(Int VMIN, Int VMAX) {
+	IF(VMAX=0) {
+		Int TMPMIN=RMD_VMIN
+		Int TMPMAX=RMD_VMAX
+		TMPMIN=TMPMIN+VMIN
+		TMPMAX=TMPMAX+VMIN
+		IF(TMPMIN < 0) {
+			TMPMIN=0
+		}
+		IF(TMPMIN > 127) {
+			TMPMAX=127
+		}
+		IF(TMPMAX < 0) {
+			TMPMAX=0
+		}
+		IF(TMPMAX > 127) {
+			TMPMAX=127
+		}
+		RMD_VMIN=TMPMIN
+		RMD_VMAX=TMPMAX
+	} ELSE {
+		RMD_VMIN=VMIN
+		RMD_VMAX=VMAX
+	}
+}
+
+Function RMD(Str MML) {
+	Str BUF=""
+	Str FIRST=""
+	Str ML=""
+	Str M
+	Str R
+	Str VL
+	Str RRMML
+	Str RMML
+	Str FM=""
+	Int C=0
+	Str LenStr
+	Int TOKEN=0
+	Int TO=0
+	BUF=""
+	R=""
+	IF(RMD_ENABLE=0) {
+		BUF=MML
+	} ELSE {
+		For(Int i=1; MID(MML, i, 1)!=""; i++) {
+			M=MID(MML, i, 1)
+			IF((ASC(M)>=48 && ASC(M)<=57) || M="r"||M="."||M="^") {
+				IF(TO>=1) {
+					LenStr=LenStr+M
+				}
+				ML=ML+M
+			} ELSE {
+				IF((ASC(M)>=97 && ASC(M)<=103)) {
+					TOKEN++
+					TO=1
+					FM=RRMML+VL+ML+RMML
+					IF(TOKEN>1) {
+						C++
+						IF(FM!="") {
+							BUF=BUF+"Sub{"+FM+"}r"+LenStr
+						}
+						TOKEN=0
+					} ELSE {
+						BUF=BUF+ML
+					}
+					LenStr=""
+					ML=M
+					IF(RMD_RMAX>0) {
+						R=Random(RMD_RMIN, RMD_RMAX)
+						IF(Random(0,10)<5) {
+							RRMML="r-"+R
+							RMML="r"+R
+						} ELSE {
+							RRMML="r"+R
+							RMML="r-"+R
+						}
+					}
+					VL="v"+Random(RMD_VMIN, RMD_VMAX)
+					RMDV(RMD_CRESC,0)
+				} ELSE {
+					ML=ML+M
+					IF(TO=1) {
+						TO=2
+					}
+					IF((ASC(M)>=97 && ASC(M)<=103) || M="r" || (ASC(M)>=48 && ASC(M)<=57) || M="." ||M="^"|| M="-"||M="#") {
+					} ELSE {
+						TO=0
+					}
+				}
+			}
+		}
+		FM=RRMML+VL+ML+RMML
+		IF(FM!="") {
+			BUF=BUF+"Sub{"+FM+"}r"+LenStr
+		}
+	}
+	BUF
+}
+
+Function RCDENABLE(Int FLG) {
+	RCD_ENABLE=FLG
+}
+
+Function SRCDENABLE(Int FLG) {
+	SRCD_ENABLE=FLG
+}
+
+Function RCDINIT(Int MIN, Int MAX, Int VMIN, Int VMAX, Int VDIF) {
+	RCD_MIN=MIN
+	RCD_MAX=MAX
+	IF(VMIN<>0 && VMAX<>0) {
+		RCD_VMIN=VMIN
+		RCD_VMAX=VMAX
+		RCD_CRESC=VDIF
+	} ELSE {
+		RCD_VMIN=-1
+		RCD_VMAX=-1
+		RCD_CRESC=0
+	}
+}
+
+Function RCDR(Int RMIN, Int RMAX) {
+	RCD_RMIN=RMIN
+	RCD_RMAX=RMAX
+}
+
+Function RCDV(Int VMIN, Int VMAX) {
+	RCD_CRESC=0
+	IF(VMAX=0) {
+		Int TMPMIN=RCD_VMIN
+		Int TMPMAX=RCD_VMAX
+		TMPMIN=TMPMIN+VMIN
+		TMPMAX=TMPMAX+VMIN
+		IF(TMPMIN < 0) {
+			TMPMIN=0
+		}
+		IF(TMPMIN > 127) {
+			TMPMAX=127
+		}
+		IF(TMPMAX < 0) {
+			TMPMAX=0
+		}
+		IF(TMPMAX > 127) {
+			TMPMAX=127
+		}
+		RCD_VMIN=TMPMIN
+		RCD_VMAX=TMPMAX
+	} ELSE {
+		RCD_VMIN=VMIN
+		RCD_VMAX=VMAX
+	}
+}
+
+Function RCD(Str MML) {
+	Str BUF=""
+	Str FIRST=""
+	Str ML=""
+	Str M
+	Str R
+	Str FM
+	Int C=0
+	Str VL
+	IF(RCD_ENABLE=0) {
+		BUF="'" + MML + "'"
+	} ELSE {
+		RCD_TMIN=RCD_VMIN
+		RCD_TMAX=RCD_VMAX
+
+		BUF=""
+		R=""
+		For(Int i=1; MID(MML, i, 1)!=""; i++) {
+			M=MID(MML, i, 1)
+			IF(DEBUG=1||TEST=1) {
+				Print("Count "+ C + " Str="+M)
+			}
+			IF(M="a"||M="b"||M="c"||M="d"||M="e"||M="f"||M="g") {
+				C++
+			  	IF(C<2) {
+					FIRST=ML
+					ML=FM+M
+					FM=""
+					IF(RCD_TMIN>=0 && RCD_TMAX>=0) {
+						VL="v"+Random(RCD_TMIN, RCD_TMAX)
+						RCD_TMIN=RCD_TMIN+RCD_CRESC
+						RCD_TMAX=RCD_TMAX+RCD_CRESC
+						IF(RCD_TMIN<0) { RCD_TMIN=0 }
+						IF(RCD_TMIN>127) { RCD_TMIN=127 }
+						IF(RCD_TMAX<0) { RCD_TMAX=0 }
+						IF(RCD_TMAX>127) { RCD_TMAX=127 }
+					} ELSE {
+						VL=""
+					}
+					ML=VL+ML
+				} ELSE {
+					BUF=BUF+"Sub" + CHR(123)+R+ML+CHR(125)
+					IF(RCD_MAX>0) {
+						R=R+"r"+Random(RCD_MIN, RCD_MAX)
+					}
+					IF(RCD_TMIN>=0 && RCD_TMAX>=0) {
+						VL="v"+Random(RCD_TMIN, RCD_TMAX)
+						RCD_TMIN=RCD_TMIN+RCD_CRESC
+						RCD_TMAX=RCD_TMAX+RCD_CRESC
+						IF(RCD_TMIN<0) { RCD_TMIN=0 }
+						IF(RCD_TMIN>127) { RCD_TMIN=127 }
+						IF(RCD_TMAX<0) { RCD_TMAX=0 }
+						IF(RCD_TMAX>127) { RCD_TMAX=127 }
+					} ELSE {
+						VL=""
+					}
+					ML=VL+M
+				}
+			} ELSE {
+				IF(M="#"||M="+"||M="-") {
+					ML=ML+M
+				} ELSE {
+					IF(C>0) {
+						ML=ML+VL+M
+					} ELSE {
+						FM=FM+VL+M
+					}
+				}
+			}
+		}
+		VL="Sub{r-96v"+Random(RMD_VMIN, RMD_VMAX)+"}"
+		BUF=BUF+"Sub"+CHR(123)+R+ML+CHR(125)+FIRST+"r"
+		IF(DEBUG=1 || TEST=1) {
+			Print(BUF)
+		}
+	}
+	BUF
+}
+
+Function ROCT(Str MML) {
+	Str BUF=""
+	Str FIRST=""
+	Str ML=""
+	Str M
+	Str R
+	Str FM
+	Int C=0
+	Str VL
+
+	MML=MML + ">" + MML + "<"
+
+	IF(RCD_ENABLE=0) {
+		BUF="'" + MML + "'"
+	} ELSE {
+		RCD_TMIN=RCD_VMIN
+		RCD_TMAX=RCD_VMAX
+
+		BUF=""
+		R=""
+		For(Int i=1; MID(MML, i, 1)!=""; i++) {
+			M=MID(MML, i, 1)
+			IF(DEBUG=1||TEST=1) {
+				Print("Count "+ C + " Str="+M)
+			}
+			IF(M="a"||M="b"||M="c"||M="d"||M="e"||M="f"||M="g") {
+				C++
+			  	IF(C<2) {
+					FIRST=ML
+					ML=FM+M
+					FM=""
+					IF(RCD_TMIN>=0 && RCD_TMAX>=0) {
+						VL="v"+Random(RCD_TMIN, RCD_TMAX)
+						RCD_TMIN=RCD_TMIN+RCD_CRESC
+						RCD_TMAX=RCD_TMAX+RCD_CRESC
+						IF(RCD_TMIN<0) { RCD_TMIN=0 }
+						IF(RCD_TMIN>127) { RCD_TMIN=127 }
+						IF(RCD_TMAX<0) { RCD_TMAX=0 }
+						IF(RCD_TMAX>127) { RCD_TMAX=127 }
+					} ELSE {
+						VL=""
+					}
+					ML=VL+ML
+				} ELSE {
+					BUF=BUF+"Sub" + CHR(123)+R+ML+CHR(125)
+					IF(RCD_MAX>0) {
+						R=R+"r"+Random(RCD_MIN, RCD_MAX)
+					}
+					IF(RCD_TMIN>=0 && RCD_TMAX>=0) {
+						VL="v"+Random(RCD_TMIN, RCD_TMAX)
+						RCD_TMIN=RCD_TMIN+RCD_CRESC
+						RCD_TMAX=RCD_TMAX+RCD_CRESC
+						IF(RCD_TMIN<0) { RCD_TMIN=0 }
+						IF(RCD_TMIN>127) { RCD_TMIN=127 }
+						IF(RCD_TMAX<0) { RCD_TMAX=0 }
+						IF(RCD_TMAX>127) { RCD_TMAX=127 }
+					} ELSE {
+						VL=""
+					}
+					ML=VL+M
+				}
+			} ELSE {
+				IF(M="#"||M="+"||M="-") {
+					ML=ML+M
+				} ELSE {
+					IF(C>0) {
+						ML=ML+VL+M
+					} ELSE {
+						FM=FM+VL+M
+					}
+				}
+			}
+		}
+		BUF=BUF+"Sub"+CHR(123)+R+ML+CHR(125)+FIRST+"r"
+		IF(DEBUG=1 || TEST=1) {
+			Print(BUF)
+		}
+	}
+	BUF
+}
+
+Function SRCDINIT(Int MIN, Int MAX, Int VMIN, Int VMAX, Int VDIF) {
+	SRCD_MIN=MIN
+	SRCD_MAX=MAX
+	IF(VMIN<>0 && VMAX<>0) {
+		SRCD_VMIN=VMIN
+		SRCD_VMAX=VMAX
+		SRCD_CRESC=VDIF
+	} ELSE {
+		SRCD_VMIN=-1
+		SRCD_VMAX=-1
+		SRCD_CRESC=0
+	}
+}
+
+Function SRCDR(Int RMIN, Int RMAX) {
+	SRCD_RMIN=RMIN
+	SRCD_RMAX=RMAX
+}
+
+Function SRCDV(Int VMIN, Int VMAX) {
+	SRCD_CRESC=0
+	IF(VMAX=0) {
+		Int TMPMIN=SRCD_VMIN
+		Int TMPMAX=SRCD_VMAX
+		TMPMIN=TMPMIN+VMIN
+		TMPMAX=TMPMAX+VMIN
+		IF(TMPMIN < 0) {
+			TMPMIN=0
+		}
+		IF(TMPMIN > 127) {
+			TMPMAX=127
+		}
+		IF(TMPMAX < 0) {
+			TMPMAX=0
+		}
+		IF(TMPMAX > 127) {
+			TMPMAX=127
+		}
+		SRCD_VMIN=TMPMIN
+		SRCD_VMAX=TMPMAX
+	} ELSE {
+		SRCD_VMIN=VMIN
+		SRCD_VMAX=VMAX
+	}
+}
+
+Function SRCD(Str MML) {
+	Str BUF=""
+	Str FIRST=""
+	Str ML=""
+	Str M
+	Str R
+	Str FM
+	Int C=0
+	Str VL
+
+	SRCD_TMIN=SRCD_VMIN
+	SRCD_TMAX=SRCD_VMAX
+
+	IF(SRCD_ENABLE=0) {
+		BUF="'" + MML + "'"
+	} ELSE {
+		BUF=""
+		R=""
+		For(Int i=1; MID(MML, i, 1)!=""; i++) {
+			M=MID(MML, i, 1)
+			IF(DEBUG=1||TEST=1) {
+				Print("Count "+ C + " Str="+M)
+			}
+			IF(M="a"||M="b"||M="c"||M="d"||M="e"||M="f"||M="g") {
+				C++
+			  	IF(C<2) {
+					FIRST=ML
+					ML=FM+M
+					FM=""
+					IF(SRCD_TMIN>=0 && SRCD_TMAX>=0) {
+						VL="v"+Random(SRCD_TMIN, SRCD_TMAX)
+						SRCD_TMIN=SRCD_TMIN+SRCD_CRESC
+						SRCD_TMAX=SRCD_TMAX+SRCD_CRESC
+						IF(SRCD_TMIN<0) { SRCD_TMIN=0 }
+						IF(SRCD_TMIN>127) { SRCD_TMIN=127 }
+						IF(SRCD_TMAX<0) { SRCD_TMAX=0 }
+						IF(SRCD_TMAX>127) { SRCD_TMAX=127 }
+					} ELSE {
+						VL=""
+					}
+					ML=VL+ML
+				} ELSE {
+					BUF=BUF+"Sub" + CHR(123)+R+ML+CHR(125)
+					IF(SRCD_MAX>0) {
+						R=R+"r"+Random(SRCD_MIN, SRCD_MAX)
+					}
+					IF(SRCD_TMIN>=0 && SRCD_TMAX>=0) {
+						VL="v"+Random(SRCD_TMIN, SRCD_TMAX)
+						SRCD_TMIN=SRCD_TMIN+SRCD_CRESC
+						SRCD_TMAX=SRCD_TMAX+SRCD_CRESC
+						IF(SRCD_TMIN<0) { SRCD_TMIN=0 }
+						IF(SRCD_TMIN>127) { SRCD_TMIN=127 }
+						IF(SRCD_TMAX<0) { SRCD_TMAX=0 }
+						IF(SRCD_TMAX>127) { SRCD_TMAX=127 }
+					} ELSE {
+						VL=""
+					}
+					ML=VL+M
+				}
+			} ELSE {
+				IF(M="#"||M="+"||M="-") {
+					ML=ML+M
+				} ELSE {
+					IF(C>0) {
+						ML=ML+VL+M
+					} ELSE {
+						FM=FM+VL+M
+					}
+				}
+			}
+		}
+		BUF=BUF+"Sub"+CHR(123)+R+ML+CHR(125)+FIRST+"r"
+		IF(DEBUG=1 || TEST=1) {
+			Print(BUF)
+		}
+	}
+	BUF
+}
+
+Function SROCT(Str MML) {
+	Str BUF=""
+	Str FIRST=""
+	Str ML=""
+	Str M
+	Str R
+	Str FM
+	Int C=0
+	Str VL
+
+	MML=MML + ">" + MML + "<"
+	IF(SRCD_ENABLE=0) {
+		BUF="'" + MML + "'"
+	} ELSE {
+		SRCD_TMIN=SRCD_VMIN
+		SRCD_TMAX=SRCD_VMAX
+
+		BUF=""
+		R=""
+		For(Int i=1; MID(MML, i, 1)!=""; i++) {
+			M=MID(MML, i, 1)
+			IF(DEBUG=1||TEST=1) {
+				Print("Count "+ C + " Str="+M)
+			}
+			IF(M="a"||M="b"||M="c"||M="d"||M="e"||M="f"||M="g") {
+				C++
+			  	IF(C<2) {
+					FIRST=ML
+					ML=FM+M
+					FM=""
+					IF(SRCD_TMIN>=0 && SRCD_TMAX>=0) {
+						VL="v"+Random(SRCD_TMIN, SRCD_TMAX)
+						SRCD_TMIN=SRCD_TMIN+SRCD_CRESC
+						SRCD_TMAX=SRCD_TMAX+SRCD_CRESC
+						IF(SRCD_TMIN<0) { SRCD_TMIN=0 }
+						IF(SRCD_TMIN>127) { SRCD_TMIN=127 }
+						IF(SRCD_TMAX<0) { SRCD_TMAX=0 }
+						IF(SRCD_TMAX>127) { SRCD_TMAX=127 }
+					} ELSE {
+						VL=""
+					}
+					ML=VL+ML
+				} ELSE {
+					BUF=BUF+"Sub" + CHR(123)+R+ML+CHR(125)
+					IF(SRCD_MAX>0) {
+						R=R+"r"+Random(SRCD_MIN, SRCD_MAX)
+					}
+					IF(SRCD_TMIN>=0 && SRCD_TMAX>=0) {
+						VL="v"+Random(SRCD_TMIN, SRCD_TMAX)
+						SRCD_TMIN=SRCD_TMIN+SRCD_CRESC
+						SRCD_TMAX=SRCD_TMAX+SRCD_CRESC
+						IF(SRCD_TMIN<0) { SRCD_TMIN=0 }
+						IF(SRCD_TMIN>127) { SRCD_TMIN=127 }
+						IF(SRCD_TMAX<0) { SRCD_TMAX=0 }
+						IF(SRCD_TMAX>127) { SRCD_TMAX=127 }
+					} ELSE {
+						VL=""
+					}
+					ML=VL+M
+				}
+			} ELSE {
+				IF(M="#"||M="+"||M="-") {
+					ML=ML+M
+				} ELSE {
+					IF(C>0) {
+						ML=ML+VL+M
+					} ELSE {
+						FM=FM+VL+M
+					}
+				}
+			}
+		}
+		BUF=BUF+"Sub"+CHR(123)+R+ML+CHR(125)+FIRST+"r"
+		IF(DEBUG=1 || TEST=1) {
+			Print(BUF)
+		}
+	}
+	BUF
+}
+
+Function RDINIT(Int _RDVOL, Int _RANDV, Int _RANDR, Int _BDROTATE, Int _SDROTATE, Int _CYMROTATE) {
+	RDVOL=_RDVOL
+	RANDV=_RANDV
+	RANDR=_RANDR
+	BDROTATE=_BDROTATE
+	SDROTATE=_SDROTATE
+	CYMROTATE=_CYMROTATE
+}
+
+Function BassDrum(Int VO) {
+	Int CC
+	IF(BDROTATE=0) {
+		CC=VO
+	} ELSE {
+		IF(BDINIT=0) {
+			CC=BassDrum1
+			BDINIT=1
+		} ELSE {
+				CC=BassDrum2
+			BDINIT=0
+		}
+	}
+	Result=CC
+}
+
+Function Snare(Int VO) {
+	Int CC
+	IF(SDROTATE=0) {
+		CC=VO
+	} ELSE {
+		IF(SDINIT=0) {
+			CC=Snare1
+			SDINIT=1
+		} ELSE {
+				CC=Snare2
+			SDINIT=0
+		}
+	}
+	Result=CC
+}
+
+Function Cymbal(Int VO) {
+	Int CC
+	IF(CYMROTATE=0) {
+		CC=VO
+	} ELSE {
+		IF(CYMINIT=0) {
+			CC=CrashCymbal1
+			CYMINIT=1
+		} ELSE {
+			CC=CrashCymbal2
+			CYMINIT=0
+		}
+	}
+	Result=CC
+}
+
+Function RDV(Int V) {
+	RDVOL=V
+}
+
+Function RDCresc(Int V) {
+	RDVOL=RDVOL+V
+	IF(RDVOL>127) {
+		RDVOL=127
+	}
+	IF(RDVOL<0) {
+		RDVOL=0
+	}
+}
+
+Function _RDV(Int V) {
+	Int R=V
+	R=R-(127-RDVOL)
+	IF(R<0) {
+		R=0
+	}
+	Result=R
+}
+
+Function RandV(Int MIN, Int MAX) {
+	Str MML="v"
+	IF(RANDV=0) {
+		MML=MML+#STR(_RDV(MAX)
+	} ELSE {
+		MML=MML+Random(_RDV(MIN), _RDV(MAX))
+	}
+	MML
+}
+
+Str RMML
+Function RandR(Int MIN, Int MAX) {
+	Str MML
+	IF(RANDR=1) {
+		MML=MML+"r"
+		RMML=RMML+"r"
+		Int VALUE=Random(0,10)
+		IF(VALUE<5) {
+			MML=MML+"-"
+		} ELSE {
+			RMML=RMML+"-"
+		}
+		Str RAND=Random(MIN,MAX)
+		MML=MML+RAND
+		RMML=RMML+RAND
+		MML
+	}
+}
+
+Function SyncR() {
+	Str MML=RMML
+	RMML=""
+	MML
+}
+
+
+#RDRUMSET1={
+	// stick
+	$k{Sub{RandR(800,1536) RandV(124,127) n(Sticks),16}r} //37
+
+	// Bass Drum
+	$B{Sub{RandR(800,1536) RandV(124,127) n(BassDrum(Kick2)),16}r}//35
+	$b{Sub{RandR(800,1536) RandV(124,127) n(BassDrum(Kick1)),16}r}//36
+
+	// Snare Drum
+	$s{Sub{RandR(800,1536) RandV(120,127) n(Snare(Snare1)),16}r}//38
+	$S{Sub{RandR(800,1536) RandV(120,127) n(Snare(Snare2)),16}r}//40
+
+	// Toms
+	$L{Sub{RandR(800,1536) RandV(123,127) n(LowTom2),16}r}//41
+	$l{Sub{RandR(800,1536) RandV(123,127) n(LowTom1),16}r}//43
+	$M{Sub{RandR(800,1536) RandV(123,127) n(MidTom2),16}r}//45
+	$m{Sub{RandR(800,1536) RandV(123,127) n(MidTom1),16}r}//47
+	$T{Sub{RandR(800,1536) RandV(123,127) n(HighTom2),16}r}//48
+	$t{Sub{RandR(800,1536) RandV(123,127) n(HighTom1),16}r}//50
+
+	// Hihat
+	$p{Sub{RandR(800,1536) RandV(110,127) n(PedalHiHat),16}r}//44
+	$h{Sub{RandR(800,1536) RandV( 65, 80) n(ClosedHiHat),16}r}//42
+	$o{Sub{RandR(800,1536) RandV( 90,110) n(OpenHiHat),16}r}//46
+
+	// Ride
+	$r{Sub{RandR(800,1536) RandV(100,110) n(RideCymbal1),16}r}//51
+	$R{Sub{RandR(800,1536) RandV(120,127) n(RideCymbal2),16}r}//59
+	$P{Sub{RandR(800,1536) RandV(120,127) n(RideBell),16}r}//53
+
+	// Cymbal
+	$c{Sub{RandR(800,1536) RandV(120,127) n(Cymbal(CrashCymbal1)),16}r}//49
+	$C{Sub{RandR(800,1536) RandV(120,127) n(Cymbal(CrashCymbal2)),16}r}//57
+
+	// Splash
+	$a{Sub{RandR(800,1536) RandV(120,127) n(SplashCymbal),16}r}//55
+	$A{Sub{RandR(800,1536) RandV(120,127) n(ChineseCymbal),16}r}//52
+}
+
+/*
+　■ rnd.h
+
+	名目上、CCライセンスは、表示-継承としましたが、
+	コード部がメインなのでGPLライセンスを適用して下さい
+
+
+	-- 拡張子"h"が、何らかのソフトにより登録されている場合、
+	"rnd.h.mml"等とリネームされることがあります
+
+ 	この場合、フォルダオプションの"登録されている拡張子は表示しない"
+	のチェックを一時外し、リネームしてみて下さい --
+
+　■ 概要
+
+	メロディーラインにごくわずかな休符を＋／－につけたり、音量（ベロシティー）を
+　　範囲内でランダムに演奏させることで、リアルな演奏感をつけるものです。
+
+　■ 基本雛型
+	TR(1)
+	  RMDINIT(53,513,90,110)
+	  l4 RMD(ceg)
+	  RMDV(5)
+	  l8 RMD(<b>fg)
+	  RMDV(-5)
+	  l8 RMD(ceg)
+	TR(2)
+	  RCDINIT(53,513)
+	  l4 RCD(ceg)
+	  l8 RCD(<b>fg)
+	  RCDINIT(53,513,90,100)
+	  l8 RCD(ceg)
+
+　■ 関数 RMDINIT(rmin, rmax, vmin, vmax)
+　　RMD機能の初期化を行います。
+	rmin : 休符の最小値 (1～System.TimeBaseの値)
+	rmax : 休符の最大値 (1～System.TimeBaseの値)
+	vmin : 音量の最小値 (0～127)
+	vmax : 音量の最大値 (0～127)
+
+　■ 関数 RMD(mml)
+　　MMLを生演奏に近くなるように演奏をします。
+　　（ストトンは使えません）
+　　サポートしているMMLリスト
+		c- c c# d- d d# e- e e# f- f f# g- g g# a- a a# b- b b#
+		r . ^
+		1 2 3 4 5 6 7 8 9 0
+	※数値は一応サポートしていますが、長さがうまくいかない場合、
+　　　前に l8 等をつけて対応して下さい。
+
+　　※和音はサポートしていません。RCD系の関数を使用して下さい。
+
+　■ 関数 RMDR(rmin, rmax)
+　　RMD機能の休符値のみ設定します。
+	rmin : 休符の最小値 (1～System.TimeBaseの値)
+	rmax : 休符の最大値 (1～System.TimeBaseの値)
+
+　■ 関数 RMDV(vmin, vmax)
+　　RMD機能の音量値のみ設定します。
+	vmin : 音量の最小値 (0～127)
+	vmax : 音量の最大値 (0～127)
+
+　■ 関数 RMDCresc(cresc)
+　　ノートごとにcresc値の乱数音量値分を増量します。
+　　マイナス値を設定すると、減量します。
+	cresc : 音量増減分 (-127～127)
+
+　■ 関数 RMDEnable(enabled)
+　　RMD機能を有効にします。初期値は1です。
+　　enabled : 1=有効、0=無効
+
+　■ 関数 RCDINIT(rmin,rmax,vmin,vmax,vdif)
+　　RCD機能の乱数値を設定する。
+	rmin : 休符の最小値 (1～System.TimeBaseの値)
+	rmax : 休符の最大値 (1～System.TimeBaseの値)
+	vmin : 音量の最小値 (0～127)
+	vmax : 音量の最大値 (0～127)
+	vdif : 音量増加値（マイナスを設定すると減少値） (-127～127)
+
+　■ 関数 RCD(mml)
+	和音のMMLを生演奏に近くなるように演奏をします。
+	すでに「'～'」で囲まれているのと同等です。
+
+　　（ストトンは使えません）
+　　サポートしているMMLリスト
+		c- c c# d- d d# e- e e# f- f f# g- g g# a- a a# b- b b#
+		r . ^
+		1 2 3 4 5 6 7 8 9 0
+	※数値は一応サポートしていますが、長さがうまくいかない場合、
+　　　前に l8 等をつけて対応して下さい。
+
+　　※単音はサポートしていません。RMD系の関数を使用して下さい。
+
+　■ RCOT(mml)
+　　単音のMMLを入れると自動的に１オクターブ上の音と一緒に和音で生演奏に
+　　近くなるように演奏をします。
+
+　　（ストトンは使えません）
+　　サポートしているMMLリスト
+		c- c c# d- d d# e- e e# f- f f# g- g g# a- a a# b- b b#
+		r . ^
+		1 2 3 4 5 6 7 8 9 0
+	※数値は一応サポートしていますが、長さがうまくいかない場合、
+　　　前に l8 等をつけて対応して下さい。
+
+　■ 関数 RCDR(rmin, rmax)
+　　RCD機能の休符値のみ設定します。
+	rmin : 休符の最小値 (1～System.TimeBaseの値)
+	rmax : 休符の最大値 (1～System.TimeBaseの値)
+
+　■ 関数 RCDV(vmin, vmax)
+　　RCD機能の音量値のみ設定します。
+	vmin : 音量の最小値 (0～127)
+	vmax : 音量の最大値 (0～127)
+
+　■ 関数 RCDEnable(enabled)
+　　RCD機能を有効にします。初期値は1です。
+　　enabled : 1=有効、0=無効
+
+　■ 関数 SRCDINIT(rmin,rmax,vmin,vmax,vdif)
+　　RCD機能（サブ）の乱数値を設定する。
+	rmin : 休符の最小値 (1～System.TimeBaseの値)
+	rmax : 休符の最大値 (1～System.TimeBaseの値)
+	vmin : 音量の最小値 (0～127)
+	vmax : 音量の最大値 (0～127)
+	vdif : 音量増加値（マイナスを設定すると減少値） (-127～127)
+
+　■ 関数 SRCD(mml)
+	和音のMMLを生演奏に近くなるように演奏をします。
+	すでに「'～'」で囲まれているのと同等です。
+
+　　（ストトンは使えません）
+　　サポートしているMMLリスト
+		c- c c# d- d d# e- e e# f- f f# g- g g# a- a a# b- b b#
+		r . ^
+		1 2 3 4 5 6 7 8 9 0
+	※数値は一応サポートしていますが、長さがうまくいかない場合、
+　　　前に l8 等をつけて対応して下さい。
+
+　　※単音はサポートしていません。RMD系の関数を使用して下さい。
+
+　■ SRCOT(mml)
+　　単音のMMLを入れると自動的に１オクターブ上の音と一緒に和音で生演奏に
+　　近くなるように演奏をします。
+
+　　（ストトンは使えません）
+　　サポートしているMMLリスト
+		c- c c# d- d d# e- e e# f- f f# g- g g# a- a a# b- b b#
+		r . ^
+		1 2 3 4 5 6 7 8 9 0
+	※数値は一応サポートしていますが、長さがうまくいかない場合、
+　　　前に l8 等をつけて対応して下さい。
+
+　■ 関数 SRCDR(rmin, rmax)
+　　RCD機能（サブ）の休符値のみ設定します。
+	rmin : 休符の最小値 (1～System.TimeBaseの値)
+	rmax : 休符の最大値 (1～System.TimeBaseの値)
+
+　■ 関数 SRCDV(vmin, vmax)
+　　RCD機能（サブ）の音量値のみ設定します。
+	vmin : 音量の最小値 (0～127)
+	vmax : 音量の最大値 (0～127)
+
+　■ 関数 SRCDEnable(enabled)
+　　RCD機能（サブ）を有効にします。初期値は1です。
+　　enabled : 1=有効、0=無効
+
+　■ RDINIT(rdvol,randv_flag,randr_flag,bdrotate,sdrotate,cymrotate)
+	RD機能を初期化します。
+	rdvol : ドラムの基本音量(0～127)
+	randv_flag : ランダム音量フラグ 1=有効、0=無効
+	randr_flag : ランダム休符フラグ 1=有効、0=無効
+	bdrotate   : バスドラムロテートフラグ  1=有効、0=無効
+　　sdrotate   : スネアドラムロテートフラグ  1=有効、0=無効
+　　cymrotate  : シンバルロテートフラグ  1=有効、0=無効
+
+　■ RDV(vol)
+　　RD機能の基本音量を設定します(0～127)
+
+　■ RDCresc(vol)
+　　ノートごとに音量増をします。マイナス値を設定すると、減をします。 (0～127)
+
+　■ RandV(Int MIN, Int MAX)
+	ドラム定義マクロ内で使用する音量乱数範囲設定関数
+	MIN : 最小音量 (0～127)
+	MAX : 最大音量 (0～127)
+
+　■ RandR(Int MIN, Int MAX)
+	ドラム定義マクロ内で使用する休符乱数範囲設定関数
+	MIN : 休符の最小値 (1～System.TimeBaseの値)
+	MAX : 休符の最大値 (1～System.TimeBaseの値)
+
+　■ SyncR()
+	通常使用することはありませんが、ドラムの乱数休符を強制的にクリアする関数
+
+　■ #RDRUMSET1
+	既にRDVで定義してあるサンプルドラムセット
+　　以下に対応します。
+		k : Sticks
+		B : Kick2 / b : Kick1
+		s : Snare1 / S : Snare2
+		L : LowTom2 / l : LowTom1
+		M : MidTom2 / m : MidTom2
+		T : HighTom2 / t : HighTom1
+		p : PedalHihat / h : ClosedHihat / o : OPenHihat
+		r : RideCymbal1 / R : RideCymbal2 / P : RideBell
+		c : CrashCYmbal1 / C : CrashCymbal2
+		a : SplashCymbal / A : ChineseCymbal
+
+　■ ドラムセットの指定方法のサンプル
+	$p{Sub{RandR(800,1536) RandV(110,127) n(PedalHiHat),16}r}
+	$h{Sub{RandR(800,1536) RandV( 65, 80) n(ClosedHiHat),16}r}
+	$o{Sub{RandR(800,1536) RandV( 90,110) n(OpenHiHat),16}r}
+
+　　このマクロで指定することで、通常通りのドラムマクロで演奏感をつけることができます。
+　　※ただし、ドラムノート音の長さに依存するものは、16の数字を適時変更するか、
+	　通常の方法でマクロを指定して下さい。
+
+　■ よりリアリティーある演奏にさせるためのコツ
+　　より細かいシステムクォンタイズ(System.TimeBase)にすることをおすすめします。
+	最低でも System.TimeBase=192に設定するようにしましょう。
+
+　■ 現在わかってる問題
+	MMLに数字を入れて長さを設定してもうまくいかないことがあります。
+	その場合は、事前に、l8 等を設定して、長さを設定して下さい。
+
+*/
+
+#REV={
+	IF(TWM2=1) {
+		REV(50)
+	}ELSE{
+		REV(100)
+	}
+}
+
+#R={
+	RCDINIT(480,768)
+	RMDINIT(480,768,90,110)
+}
+
+IF(DY=0) {
+	#SP={
+		RMDCresc(0)
+		RMDV(33,36)
+		RCDV(33,36)
+		Sub {RMD(r96)}
+	}
+
+	#PP={
+		RMDCresc(0)
+		RMDV(33,48)
+		RCDV(33,48)
+		Sub {RMD(r96)}
+	}
+
+	#PPS={
+		RMDCresc(0)
+		RMDV(40,56)
+		RCDV(40,56)
+		Sub {RMD(r96)}
+	}
+
+	#P={
+		RMDCresc(0)
+		RMDV(48,64)
+		RCDV(48,64)
+		Sub {RMD(r96)}
+	}
+
+	#PS={
+		RMDCresc(0)
+		RMDV(56,72)
+		RCDV(56,72)
+		Sub {RMD(r96)}
+	}
+
+	#M={
+		RMDCresc(0)
+		RMDV(64,80)
+		RCDV(64,80)
+		Sub {RMD(r96)}
+	}
+
+	#MS={
+		RMDCresc(0)
+		RMDV(72,88)
+		RCDV(72,88)
+		Sub {RMD(r96)}
+	}
+
+	#F={
+		RMDCresc(0)
+		RMDV(80,96)
+		RCDV(80,96)
+		Sub {RMD(r96)}
+	}
+
+	#FS={
+		RMDCresc(0)
+		RMDV(88,104)
+		RCDV(88,104)
+		Sub {RMD(r96)}
+	}
+
+	#FF={
+		RMDCresc(0)
+		RMDV(96,112)
+		RCDV(96,112)
+		Sub {RMD(r96)}
+	}
+
+	#FFS={
+		RMDCresc(0)
+		RMDV(104,120)
+		RCDV(104,120)
+		Sub {RMD(r96)}
+	}
+
+	#SF={
+		RMDCresc(0)
+		RMDV(112,127)
+		RCDV(112,127)
+		Sub {RMD(r96)}
+	}
+
+	#SSF={
+		RMDCresc(0)
+		RMDV(127,127)
+		RCDV(127,127)
+		Sub {RMD(r96)}
+	}
+
+} ELSE {
+	#SP={
+		RMDCresc(0)
+		RMDV(48,56)
+		RCDV(48,56)
+		Sub {RMD(r96)}
+	}
+
+	#PP={
+		RMDCresc(0)
+		RMDV(52,64)
+		RCDV(52,64)
+		Sub {RMD(r96)}
+	}
+
+	#PPS={
+		RMDCresc(0)
+		RMDV(56,72)
+		RCDV(56,72)
+		Sub {RMD(r96)}
+	}
+
+	#P={
+		RMDCresc(0)
+		RMDV(64,80)
+		RCDV(64,80)
+		Sub {RMD(r96)}
+	}
+
+	#PS={
+		RMDCresc(0)
+		RMDV(72,84)
+		RCDV(72,84)
+		Sub {RMD(r96)}
+	}
+
+	#M={
+		RMDCresc(0)
+		RMDV(80,92)
+		RCDV(80,92)
+		Sub {RMD(r96)}
+	}
+
+	#MS={
+		RMDCresc(0)
+		RMDV(84,96)
+		RCDV(84,96)
+		Sub {RMD(r96)}
+	}
+
+	#F={
+		RMDCresc(0)
+		RMDV(92,108)
+		RCDV(92,108)
+		Sub {RMD(r96)}
+	}
+
+	#FS={
+		RMDCresc(0)
+		RMDV(96,112)
+		RCDV(96,112)
+		Sub {RMD(r96)}
+	}
+
+	#FF={
+		RMDCresc(0)
+		RMDV(108,120)
+		RCDV(108,120)
+		Sub {RMD(r96)}
+	}
+
+	#FFS={
+		RMDCresc(0)
+		RMDV(112,124)
+		RCDV(112,124)
+		Sub {RMD(r96)}
+	}
+
+	#SF={
+		RMDCresc(0)
+		RMDV(120,127)
+		RCDV(120,127)
+		Sub {RMD(r96)}
+	}
+
+	#SSF={
+		RMDCresc(0)
+		RMDV(127,127)
+		RCDV(127,127)
+		Sub {RMD(r96)}
+	}
+}
+
+Key(KEY)
+
+TR(1)
+	#REV
+
+TR(2)
+	#REV
+
+TR(3)
+	#REV
+
+TR(4)
+	#REV
+
+IF(IGNORETEMPO=0) {
+	曲名={"スケルツォ第２番変ロ短調作品３１(打ち込み版)"}
+} ELSE {
+	曲名={"超絶技巧すぎるかもしれないスケルツォ第２番変ロ短調作品３１"}
+}
+作者={"ななこっち★ based by Fryderyk Franciszek Chopin"}
+ 
+/////////////////////////////////////////////////////// 
+// 001.mml 
+/////////////////////////////////////////////////////// 
+ 
+
+TR(16)
+	Int TMP=240+TEMPODIFF
+	IF(IGNORETEMPO=0) {
+		Tempo=TMP
+	}
+	#tokorotentmp1={
+		TmpChangeR(190,0)
+		[1 r2]
+		[
+			TmpChangeR(285,0)
+			[3 r4]
+			TmpChangeR(240,0)
+			[1 r4]
+			:
+			TmpChangeR(180,0)
+			[1 r2]
+		]
+		TmpChangeR(265,0)
+	}
+	#tokorotentmp2={
+		TmpChangeR(230,0)
+		[1 r2]
+		[
+			TmpChangeR(285,0)
+			[3 r4]
+			TmpChangeR(240,0)
+			[1 r4]
+			:
+			TmpChangeR(180,0)
+			[1 r2]
+		]
+		TmpChangeR(265,0)
+	}
+	#tokorotentmp1
+	#japantmp1={
+		TmpChangeR(230,0)
+		TmpChangeR(280,!2.^2.)
+		TmpChangeR(380,!2.)
+		TmpChangeR(275,0)
+		TmpChangeR(290,!2^8)
+		TmpChangeR(270,0)
+		r8
+		TmpChangeR(310,!0)
+	}
+
+	#japantmp2={
+		TmpChangeR(290,!2.^2.)
+		TmpChangeR(250,!2.)
+		TmpChangeR(270,0)
+		TmpChangeR(250,!2^8)
+		TmpChangeR(300,0)
+		r8
+		TmpChangeR(310,!0)
+		TmpChangeR(330,!0)
+		TmpChangeR(300,!2.^2.^2.)
+		TmpChangeR(260,!2.^2.)
+		TmpChangeR(245,0)
+		[1 r2.]
+		TmpChangeR(180,0)
+		[1 r2.]
+		TmpChangeR(245,0)
+	}
+
+	#japantmp1
+
+	#tokorotentmp2
+	#japantmp2
+
+	#tokorotentmp2
+	#japantmp1
+
+	#tokorotentmp2
+	#japantmp2
+
+	TmpChangeR(260,!0)
+	[1 r2.]
+	[2 r2.]
+
+TR(1)
+	#TM #R
+	o4l8q100
+	#PP
+	RMD(b-2) RMD(a12b-12>d-12)
+	RMD(f)rrr<RMD(a12b-12>d-12)
+	RMD(f)rrrrr<
+	r2.
+	#SF
+	#PEDALON
+	RMD(b-2.)>>
+	#FFS
+	l1.RCD(b->g-b-<)
+	#FF
+	l4.RCD(e->ce-<)l8#MS RCD(f>cf<)#PEDALOFF #FF l4RCD(g->cg-<)
+	#F l4 RCD(f>d-f<) r4 #PP<<RMD(a12b-12>d-12)
+	RMD(f4) r4 <RMD(a12b-12>d-12)
+	RMD(f8)r8r4r4
+	r2.<
+
+	#SF
+	#PEDALON RMD(a-2.) >>l1.RCD(a->fa-<)#PEDALOFF
+	#FS
+	#PEDALON l4.RCD(e->ce-<)l8 #MS RCD(f>cf<) l4 #FS RCD(g->cg-<)#PEDALOFF
+	#F
+	l4 RCD(f>d-f<) <r2
+	#PEDALON l2.RCD(a>f<)< RCD(a>f<)#PEDALOFF
+	[6 r2.]
+
+	#PP
+	r2 RMD(a12b-12>d-12)
+	RMD(f8)r8r4< RMD(a12b-12>d-12)
+	RMD(f8)r8r2
+	r2.<
+	#SF #PEDALON RMD(b-2.)>>
+	#FF l2.^4.RCD(b->g-b-<) l8 #MS RCD(e->ce-<)l4 #M RCD(e->ce-<)
+	#F l4.RCD(e->ce-<) #M l8 RCD(f>cf<) l4#F RCD(g->cg-<) #PEDALOFF
+	l4RCD(f>d-f<)< r4 #PP <RMD(a12b-12>d-12)
+	RMD(f8)r8 r4 <RMD(a12b-12>d-12)
+	RMD(f8)r8r2
+	r2.<
+	#SF #PEDALON RMD(c4) r2>>>
+	#FF l1.RCD(ca->c<)< #PEDALOFF
+	#FS #PEDALON l4.RCD(g>eg<) l8#M RCD(a->ea-<) l4#FS RCD(b->eb-<) #PEDALOFF
+	l4RCD(a->fa-<)r2<
+	#PEDALON l2.RCD(a->cfa-<)<
+	RCD(a->cfa-<) #PEDALOFF
+	[5 r2.]
+	
+TR(3)
+	#TM #R
+	#PP
+	o3l8q100
+	RMD(b-2) RMD(a12b-12>d-12)
+	RMD(f)rrr<RMD(a12b-12>d-12)
+	RMD(f)rrrrr<
+	r2.<
+	#PEDALON
+	#SF
+	l2.RCD(b->b-)>
+	#F
+	l1.RCD(b->ce-g-b-<)
+	#M
+	l4.RCD(b->ce-g-b-<)l8RCD(b->ce-g-b-<)l4RCD(b->ce-g-b-<)#PEDALOFF
+	l4 RCD(b->d-fb-<)<r4
+	#PP RMD(a12b-12>d-12)
+	RMD(f8)r8r4< RMD(a12b-12>d-12)
+	RMD(f8)r8r4r4
+	#SF
+	r2.<<
+	#PEDALON l2.RCD(a->a-)>
+	#FS
+	Sub{r-6 RCDINIT(10,18)RCD(a->f>d-) } r1.#R << #PEDALOFF
+	#M #PEDALON l4.RCD(a->e-g-a-<)l8 RCD(a->e-g-a-<) l4 RCD(a->e-g-a-<)#PEDALOFF
+	>l4RCD(d-fa-)<r2
+	#FF #PEDALON l2.RCD(f>cf<)<RCD(f>cf<)#PEDALOFF
+	#PEDALON <l1.^4 RCD(f>f<) #PEDALOFF l4 #SF RCD(g->g-<)r4
+	r1.r2.>
+	
+	#PP r2 RMD(a12b-12>d-12)
+	RMD(f8)r8r4< RMD(a12b-12>d-12)
+	RMD(f8)r8r2
+	r2.<<
+	#SF#PEDALON l2.RCD(b->b-)>
+	#F l2.^4.RCD(b->ce-g-b-<)
+	#M l8 RCD(b->ce-g-b-<) l4 RCD(b->ce-g-b-<)
+	l4.RCD(b->ce-g-b-<) l8 RCD(b->ce-g-b-<) l4RCD(b->ce-g-b-<) #PEDALOFF
+	l4RCD(b->d-fb-<)< #PP r4 RMD(a12b-12>d-12)
+	RMD(f8) r8r4 <RMD(a12b-12>d-12)
+	RMD(f8) r8r2
+	r2.<<
+
+	#SF
+	#PEDALON l2.RCD(c>c)>>
+	#F l1.RCD(cfa->c<)#PEDALOFF
+	#MS #PEDALON l4.RCD(ceb->c<) l8RCD(ceb->c<) l4 RCD(ceb->c<) #PEDALOFF
+	l4RCD(fa->c<)r2<
+	#PEDALON l2.RCD(f>cf<)<
+	RCD(f>cf<)< #PEDALOFF
+	#FFS #PEDALON l1.^4 RCD(e>e<) #PEDALOFF l4 #SF RCD(f>f<)r4
+	[2 r2.]
+
+ 
+/////////////////////////////////////////////////////// 
+// 002.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(50:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(240,0)
+	TmpChangeR(315,!2.)
+	[6 r2.]
+	TmpChangeR(280,!4.)
+	TmpChangeR(265,!4.)
+	TmpChangeR(250,0)
+	TmpChangeR(320,!2.)
+	[4 r2.]
+	TmpChangeR(285,!2.)
+	TmpChangeR(265,!2.)
+	TmpChangeR(250,0)
+	TmpChangeR(230,!2)
+	TmpChangeR(210,!8)
+	TmpChangeR(200,!8)
+
+TR(1)
+	#TM
+	o8q92
+	#SF
+	#PEDALON l2.^4 RMD(f)
+	#FF l8 RMD(e-d-<a-)#FS RMD(f)
+	#F RMD(e-d-<a-)#M RMD(fe-d-)<
+	#P RMD(a-4)#PEDALOFF r2>
+	#M
+	#PEDALON RMD(cd-e-fg-a-) #PEDALOFF
+	RMD(a4)r2
+
+	#P
+	RMD(aa-gg-ff-)
+	RMD(e-4)r2
+
+
+	#SF o8
+	#PEDALON l2.^4 RMD(f)
+	#FF l8 RMD(e-d-<)#FS RMD(a-f)
+	#F RMD(e-d-<) #MS RMD(a-fe-d-)<
+	#P RMD(a-4)#PEDALOFF r2>
+	#PP
+	RMD(cd-e-fg-a-)
+	RMD(a4)r2
+
+	RMD(aa-gg-ff-)
+	RMD(e-4)r2
+
+TR(3)
+	#TM o2 #FF q65
+	#PEDALON
+	l4
+	RCD(d->d-)r4#F RCD(a->f)
+	RCD(f>d-)r4<<RCD(a->f)
+	RCD(f>d-)r2
+	#PEDALOFF r2.
+	<<
+	#P
+	#PEDALON RCD(a->a-)r2 #PEDALOFF
+	#PP q88 RCD(g>cg-<)q55RCD(a->cg-<)RCD(a->cg-)<
+	r2.
+	q88RCD(a>cg-<)q55RCD(a->cg-<)RCD(a->cg-<)
+
+	q65
+	o2 #FF
+	#PEDALON
+	l4
+	RCD(d->d-)r4#F RCD(a->f)
+	RCD(f>d-)r4<<RCD(a->f)
+	RCD(f>d-)r2
+	#PEDALOFF r2.
+	<<
+	#PP
+	#PEDALON RCD(a->e-g-)r2 #PEDALOFF >
+	q105l8RMD(cd-e-fg-a-)
+	RMD(a4)r2
+	<RMD(aa-gg-fe-)
+ 
+/////////////////////////////////////////////////////// 
+// 003.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(66:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(155,0)
+	TmpChangeR(200,!8)
+	TmpChangeR(275,!2.)
+	TmpChangeR(285,!4.)
+	TmpChangeR(260,!4.)
+	TmpChangeR(240,!2.^2.^2.)
+	TmpChangeR(250,!2.^2)
+	TmpChangeR(215,!2.)
+	TmpChangeR(165,!4)
+
+	TmpChangeR(260,0)
+	TmpChangeR(290,!2.)
+	TmpChangeR(210,0)
+	TmpChangeR(198,!4)
+	TmpChangeR(245,!4)
+	TmpChangeR(285,!4)
+	TmpChangeR(270,!2.^2.)
+	TmpChangeR(230,!2.)
+	TmpChangeR(255,!4)
+	TmpChangeR(245,!2.^2.)
+	TmpChangeR(230,!2)
+
+	TmpChangeR(255,0)
+	TmpChangeR(230,!2.^2.)
+	TmpChangeR(270,!2.^2.)
+	TmpChangeR(247,!2.) TmpChangeR(225,!2.)
+	TmpChangeR(240,!16) TmpChangeR(210,!2^8.)
+	TmpChangeR(250,!2.)
+	TmpChangeR(275,!2.^2.^2.) TmpChangeR(250,!2.)
+	TmpChangeR(202,!2^8) TmpChangeR(175,!8)
+	TmpChangeR(190,!8) TmpChangeR(185,!8) TmpChangeR(255,!2.^2.^2)
+
+	TmpChangeR(260,!2.^2.^2.^2.)
+	TmpChangeR(235,!2.^2.)
+	TmpChangeR(215,!2.)
+	TmpChangeR(235,!2.)
+	TmpChangeR(275,!2.^2.^2.^2.)
+	TmpChangeR(300,!2.^2.)
+	TmpChangeR(310,!2.^2)
+	TmpChangeR(240,!2.^4)
+	TmpChangeR(260,!2.^2.^2.)
+	TmpChangeR(230,!4)
+
+TR(1)
+	o6#TMq100
+	#R #M
+	#PEDALON RMD(f1e-4.d-8)#PEDALOFF
+	#PEDALON RMD(d-2.)#PEDALOFF #PEDALON l2.^2RMD(g-f4)#PEDALOFF #PEDALON RMD(f4e-4d-4) #PEDALOFF
+	#PEDALON RMD(b-2.)#PEDALOFF
+	#F #PEDALON RMD(b-2b-4)#PEDALOFF
+	#PEDALON RMD(b-2e-4)#PEDALOFF
+	#PEDALON #PS RMD(e-8.) r16  Sub{r-18 #PP RMD(f34g34)}#F RMD(f4.e-8)#PEDALOFF
+	#P #PEDALON RMD(e-2.)#PEDALOFF
+	#M #PEDALON RMD(a-1) #F RMD(g4f4)#PEDALOFF
+	#M #PEDALON RMD(g4f4.e-8) #PEDALOFF >
+	#FF #PEDALON RMD(c2.)#PEDALOFF
+	#F #PEDALON RMD(c2c4)#PEDALOFF
+
+	#F #PEDALON RMD(c1)<RMD(b-4.a-8)#PEDALOFF
+	#PEDALON RMD(a-2.)#PEDALOFF
+	#PEDALON >RMD(d-2.)#PEDALOFF
+	#PEDALON RMD(d-2c4)#PEDALOFF
+	#PEDALON RMD(c4<b-4.a-8)#PEDALOFF
+	#FF #PEDALON >RMD(f2.)#PEDALOFF
+	#F #PEDALON RMD(f2f4)#PEDALOFF
+	#PEDALON RMD(f2.)#PEDALOFF
+	#PEDALON RMD(e-4d-4<b-4)#PEDALOFF
+	#PEDALON >RMD(c2.)#PEDALOFF
+	#PEDALON <RMD(b-4a-4f4)#PEDALOFF
+	#PEDALON RMD(b-4a-4g-8.r16)#PEDALOFF
+	#PEDALON #P Sub{r-18 RMD(g-34a-34)}#M RMD(g-4f4.e8)#PEDALOFF
+	#PEDALON RMD(e2.)#PEDALOFF
+	#PEDALON RMD(f2)Sub{RMD(a-1)}r4#PEDALOFF
+
+
+
+	#PEDALON #P Sub{RMD(<a-2>c2)}r2.#MS #PEDALOFF
+	#PEDALON RMD(>c4<)<l4.RCD(b->b-<)l8RCD(a->a-<)#PEDALOFF
+	#PEDALON l2.RCD(a->a-<)#PEDALOFF
+	#PEDALON l2.>RCD(d-a->d-<)#PEDALOFF
+	#PEDALON q100Sub{RMD(a-1)}l2 RCD(d->d-<)l4RCD(c>c<)#PEDALOFF
+	#PEDALON l4.RCD(c>c<)l8RCD(<b->b-)l4RCD(<a->a-)#PEDALOFF
+	#F #PEDALON l2.RCD(fa->f<)#PEDALOFF
+	#PEDALON #MS l2RCD(fa->f<)#M l4RCD(fa->f<)#PEDALOFF
+	#F #PEDALON l2.RCD(fa->f<)#PEDALOFF
+	#MS #PEDALON l4RCD(e-g->e-<)l4.RCD(d-g->d-<)l8RCD(<b->g-b-)#PEDALOFF
+	#PEDALON l2.RCD(ca->c<)#PEDALOFF
+	#PEDALON l4RCD(<b->g-b-)RCD(<a->fa-)RCD(<b->fb-)#PEDALOFF
+	#F #PEDALON l2RCD(<b>fb)l4RCD(<b->fb-<)#PEDALOFF
+	#PEDALON l2.^2RCD(b>fb<)l4RCD(b->fb-<)#PEDALOFF
+	#PEDALON l4RCD(b>fb<)RCD(b->fb-<)RCD(b>fb<)#PEDALOFF
+	#PEDALON #FF l2RCD(b>g-b<)l4RCD(b->g-b-<)>
+	Sub{r2.#PEDALOFF #PEDALON} #SF l2.^4.RCD(b->g-b-<)
+	#FF l8RCD(cg->c<)l4#F RCD(cg->c<)#PEDALOFF
+	#PEDALON #FF l4.RCD(cg->c<)l8RCD(fa->f<)l4RCD(e-g->e-<)#PEDALOFF
+
+TR(2)
+	o5 #PPS #TM q100
+	#PEDALON RMD(b1.)#PEDALOFF
+	#PEDALON RMD(b2.)#PEDALOFF
+	#PEDALON RMD(b-2.)#PEDALOFF
+	#PEDALON RMD(b1.)#PEDALOFF
+	#PEDALON l2.RCD(b->d-<)#PEDALOFF
+	#PEDALON RCD(a->d-<)
+	Sub{r-18 RMD(g34>d-34)}r1.#PEDALOFF
+	#PEDALON RMD(d-2.)#PEDALOFF
+	#PEDALON RMD(c2.)#PEDALOFF
+	#PEDALON RMD(d-1.)#PEDALOFF
+	#PEDALON RMD(c1.)#PEDALOFF
+
+TR(3)
+	#TM #R o4 q95
+	#PP l8
+	#PEDALON RMD(d-a->d-fd-<a-) #aEDALOFF
+	#aEDALON RMD(d-b>d-fd-<b) #PEDALOFF
+	#PEDALON RMD(g-b>d-g-d-<b) #PEDALOFF
+	#PEDALON RMD(d-b->d-g-d-<b-) #PEDALOFF
+	#PEDALON RMD(a-b>d-a-d-<b)#PEDALOFF
+	#PEDALON RMD(d-b>d-fd-<b) #PEDALOFF
+	#PEDALON RMD(g-b->d-g-d-<b-)#PEDALOFF
+	#PEDALON RMD(f-b->d-a-d-<b-)#PEDALOFF
+	#PEDALON RMD(e-b->d-gd-<b-)#PEDALOFF
+	#PEDALON RMD(g>d-e-b-e-d-<)#PEDALOFF
+	#PEDALON RMD(a->d-e-a-e-d-<)#PEDALOFF
+	#PEDALON RMD(e->ce-a-e-c<)#PEDALOFF
+	#PEDALON RMD(b->d-e-b-e-d-<)#PEDALOFF
+	#PEDALON RMD(e->d-e-ge-d-<)#PEDALOFF
+	#PEDALON RMD(a->ce-a-e-c<)#PEDALOFF
+	#PEDALON RMD(ga->ce-c<a-)#PEDALOFF
+	#PEDALON RMD(g-a->ce-c<a-)#aEDALOFF
+	#aEDALON RMD(g-a->ce-c<a-)#PEDALOFF
+	#PEDALON RMD(fa->d-fd-<a-)#aEDALOFF
+	#aEDALON RMD(fa->d-a-d-<a-)#PEDALOFF
+	#PEDALON RMD(e-a->cg-c<a-)#PEDALOFF
+	#PEDALON RMD(e-a->cg-c<a-)#PEDALOFF
+	#PEDALON RMD(da-b>f<ba-)#PEDALOFF
+	#PEDALON RMD(da-b->f<b-a-)#PEDALOFF
+	#PEDALON RMD(e-g-b->e-<b-g-)#PEDALOFF
+	#PEDALON RMD(<g->g-b->e-<b-g-)#PEDALOFF
+	#PEDALON RMD(<a->fa->d-<a-f)#PEDALOFF
+	#PEDALON RMD(<a->fa->d-<a-f)#PEDALOFF
+	#PEDALON RMD(<a->g-a->c<a-g-)#PEDALOFF
+	#PEDALON RMD(<a->g-a->c<a-g-)#PEDALOFF
+	#PEDALON RMD(d-a->d-fd-<b-)#PEDALOFF
+	#PEDALON RMD(a->d-fa-fd-<)#PEDALOFF
+
+	#P
+	#PEDALON RMD(g-a->ce-c<a-)#aEDALOFF
+	#aEDALON RMD(g-a->ce-c<a-)#PEDALOFF
+	#PEDALON RMD(fa->d-fd-<a-)#aEDALOFF
+	#PEDALON RMD(fa->d-a-d-<a-)#PEDALOFF
+	#PEDALON RMD(e-a->cg-c<a-)#PEDALOFF
+	#PEDALON RMD(e-a->cg-c<a-)#PEDALOFF
+	#PEDALON RMD(da-b>f<ba-)#PEDALOFF
+	#PEDALON RMD(da-b->f<b-a-)#PEDALOFF
+	#PEDALON RMD(e-g-b->e-<b-g-)#PEDALOFF
+	#M
+	#PEDALON RMD(<g->g-b->e-<b-g-)#PEDALOFF
+	#PEDALON RMD(<a->fa->d-<a-f)#PEDALOFF
+	#PEDALON RMD(<a->fa->d-<a-f)#PEDALOFF
+	#PEDALON RMD(<a->fa->d<a-f)#PEDALOFF
+	#PEDALON RMD(<a->fa->d<a-f)#aEDALOFF
+	#aEDALON RMD(<a->fa->d<a-f)#aEDALOFF
+	#PEDALON RMD(<a->fa->d<a-f)#PEDALOFF
+	#PEDALON RMD(<a->e-g->e-<g-e-)#aEDALOFF
+	#aEDALON RMD(<a->e-g->e-<g-e-)#PEDALOFF
+	#PEDALON RMD(<a->e-g->c<g-e-)#PEDALOFF
+	#PEDALON RMD(<a->e-g->c<g-e-)#PEDALOFF
+ 
+/////////////////////////////////////////////////////// 
+// 004.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(118:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(250,0)
+	TmpChangeR(315,!2.)
+	TmpChangeR(310,!2.^2.^2.^2.^2.^2.)
+	TmpChangeR(240,!2.^2.^2.^2.)
+	TmpChangeR(250,!2.)
+	TmpChangeR(160,!2.^2.)
+	r2
+	TmpChangeR(160,0)
+	r2r8
+
+TR(1)
+	#TM #R q100 o6
+	#FF
+	#PEDALON l4RCD(d-f>d-<)r2<
+	l8 RMD(f>d-a-f>d-b-) #PEDALOFF
+	#SF #PEDALON l4RCD(ca-)r2<<
+	#FF l8 RMD(g->ca-g->ca-) #PEDALOFF
+	#SF #PEDALON l4RCD(d-f)r2<<
+	#FF l8 RMD(f>d-a-f>d-b-) #PEDALOFF
+	#SF #PEDALON l4RCD(ca-)r2<<
+	#FF l8 RMD(g->ca-g->ca-) #PEDALOFF
+	#SF #PEDALON l4RCD(d-f)r2<<
+	#FF l8 RMD(f>d-a-f>d-a-)
+	l8 RMD(d-<fa-d-<fa-)
+	l8 RMD(d-<fa-d-<fd-)
+	r2.>>>>
+	#SF l2.RCD(d->d-) #PEDALOFF
+	[2 r2.]
+
+TR(3)
+	#TM #R q100 o2
+	#SF #PEDALON >RMD(d-4)r4 #FS l8RMD(a->f)>
+	RMD(d-4)r2 #PEDALOFF<<<
+	#SF #PEDALON RMD(a-4)r4 >l8 #FS RMD(a->e-)>
+	RMD(c4)r2 #PEDALOFF<<
+	#SF #PEDALON RMD(d-4)r4  l8 #FS RMD(a->f)>
+	RMD(d-4)r2 #PEDALOFF<<<
+	#SF #PEDALON RMD(a-4)r4 >l8 #FS RMD(a->e-)>
+	RMD(c4)r2 #PEDALOFF<<<
+	#SSF #PEDALON RMD(d-4)r4 >#FS l8RMD(a->f)>
+	RMD(d-4)r2 r1. <<<
+	#SF l4RCD(d->d-)r2>>
+	l2.RCD(d->d-)#PEDALOFF
+	[2 r2.]
+ 
+/////////////////////////////////////////////////////// 
+// 005.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(133:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+
+	#tokorotentmp={
+		TmpChangeR(240,0)
+		[1 r2]
+		[
+			TmpChangeR(275,0)
+			[3 r4]
+			TmpChangeR(250,0)
+			[1 r4]
+			:
+			TmpChangeR(215,0)
+			[1 r2]
+		]
+		TmpChangeR(250,0)
+	}
+	#tokorotentmp
+	#japantmp1={
+		TmpChangeR(260,0)
+		TmpChangeR(300,!2.^2.)
+		TmpChangeR(250,!2.)
+		TmpChangeR(283,0)
+		TmpChangeR(250,!2^8)
+		TmpChangeR(260,0)
+		r8
+		TmpChangeR(290,!0)
+	}
+
+	#japantmp2={
+		TmpChangeR(240,!2.^2.^2.)
+		TmpChangeR(230,0)
+		TmpChangeR(280,!2.)
+		TmpChangeR(290,!0)
+		TmpChangeR(240,!0)
+		TmpChangeR(245,!2.^2.^2.)
+		TmpChangeR(220,!2.^2.)
+		TmpChangeR(245,0)
+		[2 r2.]
+	}
+	#japantmp1
+	#tokorotentmp
+
+	TmpChangeR(260,!2.^2.^2)
+	TmpChangeR(120,0)
+	Sub{
+		TmpChangeR(145,!7)
+		TmpChangeR(170,!7)
+		TmpChangeR(150,!7)
+		TmpChangeR(160,!7)
+		TmpChangeR(150,!7)
+		TmpChangeR(500,0)
+	}
+	r2.
+	TmpChangeR(280,0)
+	TmpChangeR(325,!2.^2.^2.)
+	TmpChangeR(230,!2.^2.)
+	TmpChangeR(245,0)
+	[1 r2.]
+	TmpChangeR(180,0)
+	[1 r2.]
+
+	#tokorotentmp
+	#japantmp1
+	#tokorotentmp
+
+	TmpChangeR(290,!2.^2.^2.^2.)
+	TmpChangeR(480,0)r2.
+	TmpChangeR(140,0)
+	Sub{
+		TmpChangeR(135,!6)
+		TmpChangeR(150,!6)
+		TmpChangeR(140,!6)
+		TmpChangeR(150,!6)
+		TmpChangeR(500,0)
+	}
+	r2.
+	TmpChangeR(340,0)
+	TmpChangeR(250,!2.^2.^2.^2.^2.^2.^4)
+	TmpChangeR(90,0)
+	TmpChangeR(190,!8^4)
+	TmpChangeR(260,!2^2)
+	TmpChangeR(190,!2.)
+	TmpChangeR(60,!8)
+
+TR(1)
+	#TM #R
+	o4l8q100
+	#PP
+	r2 RMD(a12b-12>d-12)
+	RMD(f)rrr<RMD(a12b-12>d-12)
+	RMD(f)rrrrr<
+	r2.
+	#SF
+	#PEDALON
+	RMD(b-2.)>>
+	#FFS
+	l1.RCD(b->g-b-<)
+	#FF
+	l4.RCD(e->ce-<)l8 #M RCD(f>cf<)#PEDALOFF #FF l4RCD(g->cg-<)
+	#FS l4 RCD(f>d-f<) r4 #PP<<RMD(a12b-12>d-12)
+	RMD(f4) r4 <RMD(a12b-12>d-12)
+	RMD(f8)r8r4r4
+	r2.<
+
+	#SF
+	#PEDALON RMD(a-2.) >>l1.RCD(a->fa-<)#PEDALOFF
+	#FF
+	#PEDALON l7Sub{RCD(e->ce-<)RCD(e>ce<)RCD(f>cf<)RCD(a->ca-<)RCD(g->cg-<)}r2.#PEDALOFF
+	#FF
+	l4 RCD(f>d-f<) <r2
+	#PEDALON l2.RCD(a>f<)< RCD(a>f<)#PEDALOFF
+	[6 r2.]
+
+	#PP
+	r2 RMD(a12b-12>d-12)
+	RMD(f8)r8r4< RMD(a12b-12>d-12)
+	RMD(f8)r8r2
+	r2.<
+	#SF #PEDALON RMD(b-2.)>>
+	#FFS l2.^4.RCD(b->g-b-<) l8#F RCD(e->ce-<)l4#MS RCD(e->ce-<)
+	#FS l4.RCD(e->ce-<) #F l8 RCD(f>cf<) l4#FS RCD(g->cg-<) #PEDALOFF
+	l4RCD(f>d-f<)< r4 #PP <RMD(a12b-12>d-12)
+	RMD(f8)r8 r4 <RMD(a12b-12>d-12)
+	RMD(f8)r8r2
+	r2.<
+	#SSF #PEDALON RMD(c4) r2>>>
+	#FFS l1.RCD(ca->c<)< #PEDALOFF
+	#FF #PEDALON l6Sub{>RCD(d-g>d-<)RCD(cg>c<)<RCD(f>cf<)RCD(g>cg<)}r2.#PEDALOFF
+	l4RCD(a->fa-<)r2<
+	#PEDALON l2.RCD(a->cfa-<)<
+	RCD(a->cfa-<) #PEDALOFF
+	[5 r2.]
+	
+TR(3)
+	#TM #R
+	#PP
+	o3l8q100
+	r2 RMD(a12b-12>d-12)
+	RMD(f)rrr<RMD(a12b-12>d-12)
+	RMD(f)rrrrr<
+	r2.<
+	#PEDALON
+	#SF
+	l2.RCD(b->b-)>
+	#F
+	l1.RCD(b->ce-g-b-<)
+	#M
+	l4.RCD(b->ce-g-b-<)l8RCD(b->ce-g-b-<)l4RCD(b->ce-g-b-<)#PEDALOFF
+	l4 RCD(b->d-fb-<)<r4
+	#PP RMD(a12b-12>d-12)
+	RMD(f8)r8r4< RMD(a12b-12>d-12)
+	RMD(f8)r8r4r4
+	#SF
+	r2.<<
+	#PEDALON l2.RCD(a->a-)>
+	#FS
+	Sub{r-6 RCDINIT(10,18)RCD(a->f>d-) } r1.#R << #PEDALOFF
+	#PEDALON #MS l7Sub{[5 RCD(a->e-g-a-<)]}r2.#PEDALOFF
+	>l4RCD(d-fa-)<r2
+	#FF #PEDALON l2.RCD(f>cf<)<RCD(f>cf<)#PEDALOFF
+	#PEDALON <l1.^4 RCD(f>f<) #PEDALOFF l4 #SF RCD(g->g-<)r4
+	r1.r2.>
+	
+	#PP r2 RMD(a12b-12>d-12)
+	RMD(f8)r8r4< RMD(a12b-12>d-12)
+	RMD(f8)r8r2
+	r2.<<
+	#SF#PEDALON l2.RCD(b->b-)>
+	#F l2.^4.RCD(b->ce-g-b-<)
+	#M l8 RCD(b->ce-g-b-<) l4 RCD(b->ce-g-b-<)
+	l4.RCD(b->ce-g-b-<) l8 RCD(b->ce-g-b-<) l4RCD(b->ce-g-b-<) #PEDALOFF
+	l4RCD(b->d-fb-<)< #PP r4 RMD(a12b-12>d-12)
+	RMD(f8) r8r4 <RMD(a12b-12>d-12)
+	RMD(f8) r8r2
+	r2.<<
+
+	#SSF
+	#PEDALON l2.RCD(c>c)>>
+	#F l1.RCD(cfa->c<)#PEDALOFF
+	#MS #PEDALON l6Sub{[4 RCD(ceb->c<)]}r2.#PEDALOFF
+	l4RCD(fa->c<)r2<
+	#PEDALON l2.RCD(f>cf<)<
+	RCD(f>cf<)< #PEDALOFF
+	#FFS #PEDALON l1. RCD(e>e<) #PEDALOFF l2. #SF RCD(f>f<)
+	#PEDALON
+#a005={
+	#P
+	l16
+	RMD(de-)
+	RMDCresc(1)
+	l16[16 RMD(fe-)]
+	#SSF
+	RMD(d)
+	#FFS
+	RMD(e-)
+}
+	Sub{#a005}>#a005
+	#PEDALOFF
+ 
+/////////////////////////////////////////////////////// 
+// 006.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(183:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(250,0)
+	TmpChangeR(325,!2.)
+	[6 r2.]
+	TmpChangeR(290,!4.)
+	TmpChangeR(275,!4.)
+	TmpChangeR(260,0)
+	TmpChangeR(335,!2.)
+	[4 r2.]
+	TmpChangeR(295,!2.)
+	TmpChangeR(275,!2.)
+	TmpChangeR(260,0)
+	TmpChangeR(250,!2)
+	TmpChangeR(220,!8)
+	TmpChangeR(210,!8)
+
+TR(1)
+	#TM
+	o8q92
+	#SF
+	#PEDALON l2.^4 RMD(f)
+	#FF l8 RMD(e-d-<a-)#FS RMD(f)
+	#F RMD(e-d-<a-)#M RMD(fe-d-)<
+	RMD(a-4)#PEDALOFF r2>
+	#M
+	#PEDALON RMD(cd-e-fg-a-) #PEDALOFF
+	#P RMD(a4)r2
+
+	#P
+	RMD(aa-gg-ff-)
+	RMD(e-4)r2
+
+
+	#SF o8
+	#PEDALON l2.^4 RMD(f)
+	#FF l8 RMD(e-d-<)#FS RMD(a-f)
+	#F RMD(e-d-<) #MS RMD(a-fe-d-)<
+	#P RMD(a-4)#PEDALOFF r2>
+	#PP
+	RMD(cd-e-fg-a-)
+	RMD(a4)r2
+
+	RMD(aa-gg-ff-)
+	RMD(e-4)r2
+
+TR(3)
+	#TM o2 #FF q65
+	#PEDALON
+	l4
+	RCD(d->d-)r4#F RCD(a->f)
+	RCD(f>d-)r4<<RCD(a->f)
+	RCD(f>d-)r2
+	#PEDALOFF r2.
+	<<
+	#P
+	#PEDALON RCD(a->a-)r2 #PEDALOFF
+	#PP q88RCD(g>cg-<)q55RCD(a->cg-<)RCD(a->cg-)<
+	r2.
+	q88RCD(a>cg-<)q55RCD(a->cg-<)RCD(a->cg-<)
+
+	q65o2 #FF
+	#PEDALON
+	l4
+	RCD(d->d-)r4#F RCD(a->f)
+	RCD(f>d-)r4<<RCD(a->f)
+	RCD(f>d-)r2
+	#PEDALOFF r2.
+	<<
+	#PP
+	#PEDALON RCD(a->e-g-)r2 #PEDALOFF >
+	q105l8RMD(cd-e-fg-a-)
+	RMD(a4)r2
+	<RMD(aa-gg-fe-)
+ 
+/////////////////////////////////////////////////////// 
+// 007.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(199:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(185,0)
+	TmpChangeR(230,!8)
+	TmpChangeR(295,!2.)
+	TmpChangeR(305,!4.)
+	TmpChangeR(280,!4.)
+	TmpChangeR(260,!2.^2.^2.)
+	TmpChangeR(270,!2.^2)
+	TmpChangeR(235,!2.)
+	TmpChangeR(165,!4)
+
+	TmpChangeR(290,0)
+	TmpChangeR(310,!2.)
+	TmpChangeR(240,0)
+	TmpChangeR(235,!4)
+	TmpChangeR(255,!4)
+	TmpChangeR(295,!4)
+	TmpChangeR(290,!2.^2.)
+	TmpChangeR(270,!2.)
+	TmpChangeR(275,!4)
+	TmpChangeR(265,!2.^2.)
+	TmpChangeR(260,!2)
+
+	TmpChangeR(275,0)
+	TmpChangeR(260,!2.^2.)
+	TmpChangeR(290,!2.^2.)
+	TmpChangeR(250,!2.) TmpChangeR(235,!2.)
+	TmpChangeR(255,!16) TmpChangeR(230,!2^8.)
+	TmpChangeR(280,!2.)
+	TmpChangeR(295,!2.^2.^2.) TmpChangeR(260,!2.)
+	TmpChangeR(242,!2^8) TmpChangeR(215,!8)
+	TmpChangeR(210,!8) TmpChangeR(205,!8) TmpChangeR(275,!2.^2.^2)
+
+	TmpChangeR(280,!2.^2.^2.^2.)
+	TmpChangeR(265,!2.^2.)
+	TmpChangeR(255,!2.)
+	TmpChangeR(265,!2.)
+	TmpChangeR(305,!2.^2.^2.^2.)
+	TmpChangeR(325,!2.^2.)
+	TmpChangeR(350,!2.^2)
+	TmpChangeR(270,!2.^4)
+	TmpChangeR(290,!2.^2.^2.)
+	TmpChangeR(270,!4)
+
+TR(1)
+	o6#TMq100
+	#R #M
+	#PEDALON RMD(f1e-4.d-8)#PEDALOFF
+	#PEDALON RMD(d-2.)#PEDALOFF #PEDALON l2.^2RMD(g-f4)#PEDALOFF #PEDALON RMD(f4e-4d-4) #PEDALOFF
+	#PEDALON RMD(b-2.)#PEDALOFF
+	#F #PEDALON RMD(b-2b-4)#PEDALOFF
+	#PEDALON RMD(b-2e-4)#PEDALOFF
+	#PEDALON #PS RMD(e-8.) r16  Sub{r-18 #SP RMD(f34g34)}#F RMD(f4.e-8)#PEDALOFF
+	#PEDALON RMD(e-2.)#PEDALOFF
+	#FF #PEDALON RMD(a-1) #F RMD(g4f4)#PEDALOFF
+	#M #PEDALON RMD(g4f4.e-8) #PEDALOFF >
+	#FF #PEDALON RMD(c2.)#PEDALOFF
+	#F #PEDALON RMD(c2c4)#PEDALOFF
+
+	#F #PEDALON RMD(c1)<RMD(b-4.a-8)#PEDALOFF
+	#PEDALON RMD(a-2.)#PEDALOFF
+	#PEDALON >RMD(d-2.)#PEDALOFF
+	#PEDALON RMD(d-2c4)#PEDALOFF
+	#PEDALON RMD(c4<b-4.a-8)#PEDALOFF
+	#FF #PEDALON >RMD(f2.)#PEDALOFF
+	#F #PEDALON RMD(f2f4)#PEDALOFF
+	#PEDALON RMD(f2.)#PEDALOFF
+	#PEDALON RMD(e-4d-4<b-4)#PEDALOFF
+	#PEDALON >RMD(c2.)#PEDALOFF
+	#PEDALON <RMD(b-4a-4f4)#PEDALOFF
+	#PEDALON RMD(b-4a-4g-8.r16)#PEDALOFF
+	#PEDALON #P Sub{r-18 RMD(g-34a-34)}#M RMD(g-4f4.e8)#PEDALOFF
+	#PEDALON RMD(e2.)#PEDALOFF
+	#PEDALON RMD(f2)Sub{RMD(a-1)}r4#PEDALOFF
+
+
+
+	#PEDALON #M Sub{l2 RCD(<a-2>a-2)RMD(c2)}r2.#MS #PEDALOFF
+	#PEDALON RMD(>c4<)<l4.RCD(b->b-<)l8RCD(a->a-<)#PEDALOFF
+	#PEDALON l2.RCD(a->a-<)#PEDALOFF
+	#PEDALON l2.>RCD(d-a->d-<)#PEDALOFF
+	#PEDALON q100Sub{RCD(g-1a-1)}#F l4.RCD(d->d-<)#MS l8RCD(c>c<)l4RCD(c>c<)#PEDALOFF
+	#PEDALON l4.RCD(c>c<)l8RCD(<b->b-)l4RCD(<a->a-)#PEDALOFF
+	#FF #PEDALON l2.RCD(fa->f<)#PEDALOFF
+	#PEDALON l2RCD(fa->f<)#F l4RCD(fa->f<)#PEDALOFF
+	#FF #PEDALON l2.RCD(fa->f<)#PEDALOFF
+	#F #PEDALON l4RCD(e-g->e-<)l4.RCD(d-g->d-<)l8RCD(<b->g-b-)#PEDALOFF
+	#PEDALON l2.RCD(ca->c<)#PEDALOFF
+	#PEDALON l4RCD(<b->g-b-)RCD(<a->fa-)RCD(<b->fb-)#PEDALOFF
+	#FF #PEDALON l2RCD(<b>fb)l4RCD(<b->fb-<)#PEDALOFF
+	#PEDALON l2.^2RCD(b>fb<)l4RCD(b->fb-<)#PEDALOFF
+	#PEDALON l4RCD(b>fb<)RCD(b->fb-<)RCD(b>fb<)#PEDALOFF
+	#PEDALON l2RCD(b>g-b<)l4RCD(b->g-b-<)>
+	Sub{r2.#PEDALOFF #PEDALON} #SF l2.^4.RCD(b->g-b-<)
+	#FF l8RCD(cg->c<)l4#F RCD(cg->c<)#PEDALOFF
+	#PEDALON #FF l4.RCD(cg->c<)l8RCD(fa->f<)l4RCD(e-g->e-<)#PEDALOFF
+
+TR(2)
+	o5 #PPS #TM q100
+	#PEDALON RMD(b1.)#PEDALOFF
+	#PEDALON RMD(b2.)#PEDALOFF
+	#PEDALON RMD(b-2.)#PEDALOFF
+	#PEDALON RMD(b1.)#PEDALOFF
+	#PEDALON l2.RCD(b->d-<)#PEDALOFF
+	#PEDALON RCD(a->d-<)
+	Sub{r-18 RMD(g34>d-34)}r1.#PEDALOFF
+	#PEDALON RMD(d-2.)#PEDALOFF
+	#PEDALON RMD(c2.)#PEDALOFF
+	#PEDALON RMD(d-1.)#PEDALOFF
+	#PEDALON RMD(c1.)#PEDALOFF
+
+TR(3)
+	#TM #R o4 q95
+	#PP l8
+	#PEDALON RMD(d-a->d-fd-<a-) #aEDALOFF
+	#aEDALON RMD(d-b>d-fd-<b) #PEDALOFF
+	#PEDALON RMD(g-b>d-g-d-<b) #PEDALOFF
+	#PEDALON RMD(d-b->d-g-d-<b-) #PEDALOFF
+	#PEDALON RMD(a-b>d-a-d-<b)#PEDALOFF
+	#PEDALON RMD(d-b>d-fd-<b) #PEDALOFF
+	#PEDALON RMD(g-b->d-g-d-<b-)#PEDALOFF
+	#PEDALON RMD(f-b->d-a-d-<b-)#PEDALOFF
+	#PEDALON RMD(e-b->d-gd-<b-)#PEDALOFF
+	#PEDALON RMD(g>d-e-b-e-d-<)#PEDALOFF
+	#PEDALON RMD(a->d-e-a-e-d-<)#PEDALOFF
+	#PEDALON RMD(e->ce-a-e-c<)#PEDALOFF
+	#PEDALON RMD(b->d-e-b-e-d-<)#PEDALOFF
+	#PEDALON RMD(e->d-e-ge-d-<)#PEDALOFF
+	#PEDALON RMD(a->ce-a-e-c<)#PEDALOFF
+	#PEDALON RMD(ga->ce-c<a-)#PEDALOFF
+	#PEDALON RMD(g-a->ce-c<a-)#aEDALOFF
+	#aEDALON RMD(g-a->ce-c<a-)#PEDALOFF
+	#PEDALON RMD(fa->d-fd-<a-)#aEDALOFF
+	#aEDALON RMD(fa->d-a-d-<a-)#PEDALOFF
+	#PEDALON RMD(e-a->cg-c<a-)#PEDALOFF
+	#PEDALON RMD(e-a->cg-c<a-)#PEDALOFF
+	#PEDALON RMD(da-b>f<ba-)#PEDALOFF
+	#PEDALON RMD(da-b->f<b-a-)#PEDALOFF
+	#PEDALON RMD(e-g-b->e-<b-g-)#PEDALOFF
+	#PEDALON RMD(<g->g-b->e-<b-g-)#PEDALOFF
+	#PEDALON RMD(<a->fa->d-<a-f)#PEDALOFF
+	#PEDALON RMD(<a->fa->d-<a-f)#PEDALOFF
+	#PEDALON RMD(<a->g-a->c<a-g-)#PEDALOFF
+	#PEDALON RMD(<a->g-a->c<a-g-)#PEDALOFF
+	#PEDALON RMD(d-a->d-fd-<b-)#PEDALOFF
+	#PEDALON RMD(a->d-fa-fd-<)#PEDALOFF
+
+	#P
+	#PEDALON RMD(g-a->ce-c<a-)#aEDALOFF
+	#aEDALON RMD(g-a->ce-c<a-)#PEDALOFF
+	#PEDALON RMD(fa->d-fd-<a-)#aEDALOFF
+	#PEDALON RMD(fa->d-a-d-<a-)#PEDALOFF
+	#PEDALON RMD(e-a->cg-c<a-)#PEDALOFF
+	#PEDALON RMD(e-a->cg-c<a-)#PEDALOFF
+	#PEDALON RMD(da-b>f<ba-)#PEDALOFF
+	#PEDALON RMD(da-b->f<b-a-)#PEDALOFF
+	#PEDALON RMD(e-g-b->e-<b-g-)#PEDALOFF
+	#M
+	#PEDALON RMD(<g->g-b->e-<b-g-)#PEDALOFF
+	#PEDALON RMD(<a->fa->d-<a-f)#PEDALOFF
+	#PEDALON RMD(<a->fa->d-<a-f)#PEDALOFF
+	#PEDALON RMD(<a->fa->d<a-f)#PEDALOFF
+	#PEDALON RMD(<a->fa->d<a-f)#aEDALOFF
+	#aEDALON RMD(<a->fa->d<a-f)#aEDALOFF
+	#PEDALON RMD(<a->fa->d<a-f)#PEDALOFF
+	#PEDALON RMD(<a->e-g->e-<g-e-)#aEDALOFF
+	#aEDALON RMD(<a->e-g->e-<g-e-)#PEDALOFF
+	#PEDALON RMD(<a->e-g->c<g-e-)#PEDALOFF
+	#PEDALON RMD(<a->e-g->c<g-e-)#PEDALOFF
+ 
+/////////////////////////////////////////////////////// 
+// 008.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(251:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(290,0)
+	TmpChangeR(340,!2.)
+	TmpChangeR(330,!2.^2.^2.^2.^2.^2.)
+	TmpChangeR(280,!2.^2.^2.^2.)
+	TmpChangeR(260,!2.)
+	TmpChangeR(150,!2.^2.)
+	r2
+	TmpChangeR(160,0)
+	r2r8
+
+TR(1)
+	#TM #R q100 o6
+	#FF
+	#PEDALON l4RCD(d-f>d-<)r2<
+	l8 RMD(f>d-a-f>d-b-) #PEDALOFF
+	#SF #PEDALON l4RCD(ca-)r2<<
+	#FF l8 RMD(g->ca-g->ca-) #PEDALOFF
+	#SF #PEDALON l4RCD(d-f)r2<<
+	#FF l8 RMD(f>d-a-f>d-b-) #PEDALOFF
+	#SF #PEDALON l4RCD(ca-)r2<<
+	#FF l8 RMD(g->ca-g->ca-) #PEDALOFF
+	#SF #PEDALON l4RCD(d-f)r2<<
+	#FF l8 RMD(f>d-a-f>d-a-)
+	l8 RMD(d-<fa-d-<fa-)
+	l8 RMD(d-<fa-d-<fd-)
+	r2.>>>>
+	#SF l2.RCD(d->d-) #PEDALOFF
+	[2 r2.]
+
+TR(3)
+	#TM #R q100 o2
+	#SF #PEDALON >RMD(d-4)r4 #FS l8RMD(a->f)>
+	RMD(d-4)r2 #PEDALOFF<<<
+	#SF #PEDALON RMD(a-4)r4 >l8 #FS RMD(a->e-)>
+	RMD(c4)r2 #PEDALOFF<<
+	#SF #PEDALON RMD(d-4)r4  l8 #FS RMD(a->f)>
+	RMD(d-4)r2 #PEDALOFF<<<
+	#SF #PEDALON RMD(a-4)r4 >l8 #FS RMD(a->e-)>
+	RMD(c4)r2 #PEDALOFF<<<
+	#SSF #PEDALON RMD(d-4)r4 >#FS l8RMD(a->f)>
+	RMD(d-4)r2 r1. <<<
+	#SF l4RCD(d->d-)r2>>
+	l2.RCD(d->d-)#PEDALOFF
+	[2 r2.]
+ 
+/////////////////////////////////////////////////////// 
+// 009.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(267:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(170,0)
+	[
+		TmpChangeR(170,!1.)
+		TmpChangeR(150,!4)
+		:
+		TmpChangeR(155,!2)
+		TmpChangeR(135,!2.)
+	]
+	TmpChangeR(110,!2)
+	TmpChangeR(130,!2.)
+	TmpChangeR(100,!1.^1)
+	TmpChangeR(90,!8)
+	TmpChangeR(80,0)
+
+TR(1)
+	#TM o4 #R q100
+	#PS
+	[2
+		l2.RCD(e>e<)l2.^2.^2.RCD(f#>f#<)
+	]
+	l2.^2.RCD(g#>e<)
+
+TR(2)
+	#TM o5 #R q100
+	#PPS l4
+	RMD(c#2.c#1 <b>c#edc#)
+	RMD(c#2.c#1 <b>c#ed.c#8)
+	RMD(c#2.<b2a4>c#1.)
+
+TR(3)
+	#TM o2 #R q100
+	#PPS
+	[
+		l2.RCD(a>a)
+		l2.^2.^2.RCD(da)<
+	]
+	>
+	l2.^2 RCD(e>d<) Sub{l4^2.^2.RMD(a)}>RMD(c#4)l2.^2.RMD(e)
+ 
+/////////////////////////////////////////////////////// 
+// 010.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(279:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(160,0)
+	TmpChangeR(220,!2.)
+	TmpChangeR(180,!2.)
+	TmpChangeR(190,!2)
+	TmpChangeR(150,!4)
+	TmpChangeR(180,!4.)
+	TmpChangeR(100,!4.)
+	TmpChangeR(70,0)
+	TmpChangeR(280,!2.)
+	TmpChangeR(160,!2.)
+	TmpChangeR(110,!2)
+	TmpChangeR(100,!4)
+	TmpChangeR(80,0)
+
+TR(1)
+	#TM #R o6
+	#P
+	q88 l2. #PEDALON RMD(c#) #PEDALOFF
+	q100 #PP Sub{r-8 l17 RMD(<b>c#<)} #P RMD(b4.a8b4)
+	RMD(>c#4.d8)q92RMD(c#4)
+	q100 #PP Sub{r-8 l17 RMD(<b>c#<)} #P RMD(b4.a8b4)
+
+	#PEDALON
+	q100
+	l8>
+	Sub{RMD(c#)}
+	#SP
+	RMD(r<c#>c#<g#>c#<g#>)
+	RMD(g#c#g#c#>c#<g#>)
+	RMD(c#<g#>g#c#g#c#>)
+	RMD(c#2.)
+	#PEDALOFF
+
+TR(3)
+	#TM #R o4 q99
+	#SP
+	r2 l4RCD(ega#)
+	RCD(df#b) r RCD(f#a>d<)
+	q85l2 RCD(fg#>c#<)q99l4RCD(ega#)
+	RCD(df#b) r q85RCD(f#a>d<)
+	#PEDALON
+	Sub{r-16RCDINIT(18,23)l2.RCD(c#g#>f<)
+	#R << #SP RMD(c#2.)
+	r1.
+	#PEDALOFF
+ 
+/////////////////////////////////////////////////////// 
+// 011.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(288:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(140,0)
+	[
+		TmpChangeR(160,!1.)
+		TmpChangeR(180,!4)
+		:
+		TmpChangeR(125,!2)
+		TmpChangeR(150,!2.)
+	]
+	TmpChangeR(150,!2^8)
+	r2
+	TmpChangeR(60,0)
+	TmpChangeR(110,!4)
+	TmpChangeR(135,0)
+	TmpChangeR(130,!1.)
+	TmpChangeR(150,!8)
+	TmpChangeR(140,0)
+
+TR(1)
+	#TM o4 #R q100
+	#PS
+	l2.RCD(>e<)l2.^2.^2.RCD(f#>f#<)
+	l2.RCD(>e<)l2.^2.^2.RCD(f#>f#<)
+	r2.
+	#P l2.^2.RCD(g#>e<)
+
+TR(2)
+	#TM o5 #R q100
+	#M l4
+	#M l2.^2.^4RMD(c#)l4 #PS RMD(<b>c#edc#)
+	#M l2.^2.^4RMD(c#)l4 #PS RMD(<b>c#ed.c#8)
+	RMD(c#16a8.f#4d4)
+	#M RMD(c#2.) #PS RMD(<b2) #P RMD(a4>c#1.)
+
+TR(3)
+	#TM o3 #R q100
+	#P
+	Sub{l2.^2.^2.^2.RMD(a)}l2.RCD(>e)
+	l2.^2.^2.<RMD(d)
+	l2.<RCD(a>a)
+	Sub{l2.^2.^2.^2.RCD(da)}r2.^2.^2.<
+	>>l2.r
+	<
+	Sub{l2.^2RMD(e)}>
+	#PP RMD(e2.d2)<
+	Sub{l4^2.^2.RMD(a)}>
+	l4RMD(c#)l2.^2.RMD(e)
+ 
+/////////////////////////////////////////////////////// 
+// 012.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(302:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(130,0)
+	r2.^2.^8
+	TmpChangeR(170,0)
+	TmpChangeR(110,!2)
+	TmpChangeR(60,0)
+	r8
+	TmpChangeR(150,0)r16
+	TmpChangeR(140,0)r16
+	TmpChangeR(160,!8)
+	r8
+	TmpChangeR(170,0)
+	TmpChangeR(180,!4)
+	TmpChangeR(145,0)r8
+	TmpChangeR(205,!2^8)
+	TmpChangeR(180,!4.)
+	TmpChangeR(150,!8)r4
+	TmpChangeR(135,!4^8^8^8^8)
+	TmpChangeR(200,!8)
+	TmpChangeR(160,!2.^2.)
+	TmpChangeR(90,!2.^2.)
+
+TR(1)
+	#TM o6 #R q100
+	#PP
+	l2.^2.^8 #PEDALON RMD(c#) #PEDALOFF
+	l8RMD(d#f#ec#<a16)r16
+	Sub{#SP #PEDALON r-16l32RMD(g#g#)}#PP >l2^8.RMD(g#)r16#PEDALOFF
+	Sub{#SP r-16l32RMD(f#g#)}#PP RMD(f#4.e8f#4)
+	RMD(g#4.a8g#8.)r16
+	Sub{#SP r-16l32RMD(f#g#)}#PP RMD(f#4.e8f#4)
+
+	#PEDALON
+	l2.^4.RMD(g#)
+	#SP<l8
+	RMD(g#>g#d#)
+	RMD(g#d#>d#<g#>d#<g#>)
+	#PEDALOFF
+	RMD(g#)
+
+TR(3)
+	#TM o4 #R q100
+	#SP
+	[3 r2.]
+	r2 l4 RCD(b>df<)
+	RCD(a>c#f#)r4RCD(c#ea)
+	l2RCD(cd#g#)l4RCD(<b>df)
+	RCD(<a>c#f#)r4RCD(c#ea)
+	#PEDALON
+	Sub{r-8 RCDINIT(12,16)<RCD(g#>d#>c)}r2.<<<<
+	l2.RMD(g#)
+	r2.
+	#PEDALOFF
+ 
+/////////////////////////////////////////////////////// 
+// 013.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(312:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(120,0)
+	TmpChangeR(170,!2.)
+	[6
+		TmpChangeR(180,0)
+		r4
+		TmpChangeR(210,!4)
+		TmpChangeR(200,!4)
+	]
+	[1
+		TmpChangeR(180,0)
+		r4
+		TmpChangeR(200,!4)
+		TmpChangeR(190,!4)
+	]
+	[1
+		TmpChangeR(180,0)
+		r4
+		TmpChangeR(170,!8)
+		TmpChangeR(160,!8.)r8.
+	]
+	[4
+		TmpChangeR(180,0)
+		r4
+		TmpChangeR(210,!4)
+		TmpChangeR(200,!4)
+	]
+	[2
+		TmpChangeR(185,0)
+		r4
+		TmpChangeR(215,!4)
+		TmpChangeR(205,!4)
+	]
+	[1
+		TmpChangeR(180,0)
+		r4
+		TmpChangeR(170,!8)
+		TmpChangeR(160,!8.)r8.
+	]
+	[1
+		TmpChangeR(160,0)
+		r4
+		TmpChangeR(140,!8)
+		TmpChangeR(145,!8.)r8.
+	]
+
+	[5
+		TmpChangeR(180,0)
+		r4
+		TmpChangeR(210,!4)
+		TmpChangeR(200,!4)
+	]
+	[1
+		TmpChangeR(160,0)
+		r4
+		TmpChangeR(140,!8)
+		TmpChangeR(145,!8.)r8.
+	]
+	[1
+		TmpChangeR(160,0)
+		r4
+		TmpChangeR(140,!8)
+		TmpChangeR(145,!8.)r8.
+	]
+	TmpChangeR(120,0)
+
+TR(1)
+	#TM o6 #R q100
+	#M
+	l4 r4 #M RMD(g#f#)
+	#PEDALON RMD(e1)#PEDALOFF
+	#PEDALON #PS RMD(ed#)#PEDALOFF
+	#PEDALON RMD(c#)r2 #PEDALOFF
+	#PEDALON #M r4 RMD(g#f#)#PEDALON
+	#PEDALON RMD(e1)#PEDALOFF
+	#PEDALON #PS RMD(ed#)#PEDALOFF
+	#PEDALON RMD(c#)r2#PEDALOFF
+	#PEDALON r4 #F >RMD(c#<b)#PEDALOFF
+	#PEDALON RMD(a1)#PEDALOFF
+	#PEDALON #M RMD(ag#)#PEDALOFF
+	#PEDALON RMD(f#)r2#PEDALOFF
+	#PEDALON #F r4>RMD(c#<b)#PEDALOFF
+	#PEDALON RMD(a1)#PEDALOFF
+	#PEDALON #MS RMD(ag#)#PEDALOFF
+	#PEDALON RMD(f#1)#aEDALOFF
+	#aEDALON #F RMD(g#a)#PEDALOFF
+	#PEDALON RMD(g#)r2#PEDALOFF
+	#PEDALON #MS r4RMD(f#e)#PEDALOFF
+	#PEDALON RMD(d#1)#PEDALOFF
+	#PEDALON RMD(d#c#)#PEDALOFF
+	#PEDALON #M RMD(c)r2#PEDALOFF
+	#PEDALON #F r4RMD(f#e)#PEDALOFF
+	#PEDALON RMD(d#)r2
+	r4#PEDALOFF #P RMD(e)#PPS q60RMD(f#)
+
+TR(2)
+	#TM o5 #R q87
+	#PP r2 r4
+	#PEDALON r4 RMD(g8g#8b12a12g#12)#PEDALOFF	
+	#PEDALON RMD(g#1)#aEDALOFF
+	[
+		#aEDALON RMD(g8g#8b12a12g#12)#PEDALOFF	
+		#PEDALON RMD(g#1)#aEDALOFF
+	]
+	#PS
+	[5
+		#aEDALON RMD(>c8c#8e12d12c#12)#PEDALOFF	
+		#PEDALON RMD(c#1<)#aEDALOFF
+		#M
+	]
+	[3
+		#aEDALON RMD(g8g#8b12a12g#12)#PEDALOFF	
+		#PEDALON RMD(g#1)#aEDALOFF
+	]
+	#PS
+	#aEDALON RMD(a#8b8>d#12c#12<b12)#PEDALOFF	
+	#PEDALON RMD(b2.)#PEDALOFF
+
+TR(3)
+	#TM o5 #R q100
+	r2.#SP l4
+	Sub{
+		[24
+			#PEDALON
+			r2.
+			#PEDALOFF
+		]
+	}
+
+	r4RMD(e<g#2)
+	RMD(>c<g#2)
+	RMD(>c#<g#2)
+	RMD(>d#<g#2)
+	RMD(>e<g#2)
+	RMD(>c<g#2)
+	RMD(>c#<g#4)
+#PP	RMD(b>g#c#2)
+	RMD(f#c#2)
+	RMD(e#c#2)
+	RMD(f#c#2)
+	RMD(g#c#2)
+	RMD(ac#2)
+	RMD(e#c#2)
+	RMD(f#c#)
+	r RMD(c#<f#)
+
+	r RMD(>c<f#)
+	r RMD(>c#<g#)
+	r RMD(>c<g#)
+	r RMD(>c#<g#)
+	r RMD(>c<g#2)
+	RMD(>c#<g#)
+	Sub {
+		r4 l2^2. RMD(f#)
+	}
+	Sub {
+		r2 l4^2. RMD(a)
+	}
+	r2.
+	>RMD(d#2.)
+
+TR(4)
+	#TM o4 #R q100
+	#P
+	l2.r2 r4
+	RCD(c#)
+	RCD(d#f#)
+	RCD(e)
+	RCD(c)
+	RCD(c#)
+	RCD(d#f#)
+	RCD(e)
+#PS	RCD(e#)
+	RCD(f#a)
+	RCD(g#b)
+	RCD(a)
+	RCD(e#)
+	RCD(f#a)
+	RCD(g#b)
+	RCD(a)<
+	RCD(a)
+	RCD(g#>d#)
+	RCD(e)<
+	RCD(g#>f#)
+	RCD(e)<
+	RCD(g#>d#)
+	RCD(e)<
+	l1.RCD(b)
+ 
+/////////////////////////////////////////////////////// 
+// 014.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(337:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(180,0)
+	TmpChangeR(280,!2)
+	TmpChangeR(305,!1)
+	TmpChangeR(315,!2.^2.^2.^2.^2.^2.^2.^2.)
+	[14 r2.]
+	TmpChangeR(250,!2.^2.^2.^2.^2.^2.)
+	TmpChangeR(150,0)
+
+#PEDAL={
+	Sub{
+		[
+			#PEDALON r1.#PEDALOFF
+			r1.
+			[3 #PEDALON r2.#PEDALOFF]
+			r2.
+		]
+		[4
+			#PEDALON r1.#PEDALOFF
+		]
+		#PEDALON r1.r1.r1.#PEDALOFF
+	}
+}
+
+TR(1)
+	#TR #TM o5 q100
+	#PEDAL
+	#P l8
+	[
+		[RMD(g#b>eg#f#e)]
+		RMD(<bg#f#e<bg#)
+		RMD(f#e<b>g#f#e)
+		RMD(c#ef#a>c#e)
+		RMD(f#a>c#ef#a)
+		#PS
+		RMD(g#f#d#<ag#f#)
+		RMD(d#<b>d#c#<ba)
+	]
+	[
+		[RMD(g#b>eg#f#e)]
+		#MS
+		RMD(c<af#ec<a)
+		RMD(f#ec<af#e)
+	]
+
+	r4#F RMD(b>)#MS RMD(eag#)
+	RMD(b>e)#F RMD(a)#MS RMD(g#b>e)
+	RMD(ag#b>eag#)
+	#F RMD(e<)#MS RMD(bag#e<b)
+	#F RMD(a)#MS RMD(g#e<bag#)
+	#F RMD(e<)#MS RMD(bag#e<b)
+	#FFS
+	RMD(e2.)
+	r2.
+
+TR(3)
+	#TR #TM o4 q25
+	#PEDAL
+	#PPS
+	
+	[
+		l4
+		[3
+			q28
+			rRCD(b>e<)RMD(g#)
+		]
+		r2.
+		[2
+			rRCD(a>c#<)RMD(f#)
+		]
+		rl2^2.RCD(b>d#<)
+		#P
+	]
+	#P
+	l4
+	[
+		[
+			rRCD(b>e<)RMD(g#)
+			#PS
+		]
+		r1.
+	]
+
+TR(4)
+	#TR #TM o4 q95
+	#PEDAL
+	#MS
+
+	l2.
+	[
+		#MS
+		RMD(e)
+		RMD(d#)
+		RMD(c#4)r2
+		<RMD(b)
+		RMD(a)
+		RMD(f#)
+		RMD(b4)r4 #P >RMD(f#4g#4f#4g#4)
+	]
+
+	[
+		#F l2.
+		RMD(e)
+		<RMD(b)
+		#FF l4RCD(a>a<)l2RCD(>c>c<<)r2.
+	]
+
+	RMD(e2.)r2.
+	#M >>Sub{r-7 RCDINIT(8,12)RCD(eb>g#)}
+
+ 
+/////////////////////////////////////////////////////// 
+// 015.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(369:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(170,0)
+	[
+		TmpChangeR(190,!1.)
+		TmpChangeR(200,!4)
+		:
+		TmpChangeR(165,!2)
+		TmpChangeR(160,!2.)
+	]
+	TmpChangeR(170,!2^8)
+	r2
+	TmpChangeR(80,0)
+	TmpChangeR(120,!4)
+	TmpChangeR(130,0)
+	TmpChangeR(125,!1.)
+	TmpChangeR(150,!8)
+	TmpChangeR(140,0)
+
+TR(1)
+	#TM o4 #R q100
+	#FS
+	l2.RCD(e>e<)l2.^2.^2.RCD(f#>f#<)
+	l2.RCD(e>e<)l2.^2.^2.^2.RCD(f#>f#<)
+	//r2.
+	#F l2.^2.RCD(g#>e<)
+
+TR(2)
+	#TM o5 #R q100
+	#F l4
+	#FS l2.^2.^4RMD(c#)l4 #F RMD(<b>c#ed.c#8)
+	#FS l2.^2.^4RMD(c#)l4 #F RMD(<b>c#ed.c#8)
+	RMDCresc(-7)RMD(c#16a8.f#4d4)
+	#FS RMD(c#2.) #F RMD(<b2)#MS RMD(a4>c#1.)
+
+TR(3)
+	#TM o3 #R q100
+	#FF
+	Sub{l2.<RMD(a)}l2.RCD(>a)
+	l2.^2.^2.RCD(da)
+	l2.<RCD(a>a)
+	Sub{l2.^2.^2.RCD(da)}r2.^2.^2.<
+	>>l2.r
+	<
+	Sub{l2.^2RMD(e)}>
+	#F RMD(e2.d2)<
+	Sub{l4^2.^2.RMD(a)}>
+	l4RMD(c#)l2.^2.RMD(e)
+ 
+/////////////////////////////////////////////////////// 
+// 016.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(383:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(160,0)
+	TmpChangeR(220,!2.)
+	TmpChangeR(180,!2.)
+	TmpChangeR(190,!2)
+	TmpChangeR(150,!4)
+	TmpChangeR(180,!4.)
+	TmpChangeR(100,!4.)
+	TmpChangeR(70,0)
+	TmpChangeR(280,!2.)
+	TmpChangeR(160,!2.)
+	TmpChangeR(110,!2)
+	TmpChangeR(100,!4)
+	TmpChangeR(80,0)
+
+TR(1)
+	#TM #R o6
+	#PS
+	q88 l2. RMD(c#)
+	q100 #PP Sub{r-8 l17 RMD(<b>c#<)} #P RMD(b4.a8b4)
+	RMD(>c#4.d8)q92RMD(c#4)
+	q100 #PP Sub{r-8 l17 RMD(<b>c#<)} #P RMD(b4.a8b4)
+
+	#PEDALON
+	q100
+	l8>
+	Sub{RMD(c#)}
+	#SP
+	RMD(r<c#>c#<g#>c#<g#>)
+	RMD(g#c#g#c#>c#<g#>)
+	RMD(c#<g#>g#c#g#c#>)
+	RMD(c#2.)
+	#PEDALOFF
+
+TR(3)
+	#TM #R o4 q99
+	#SP
+	r2 l4RCD(ega#)
+	RCD(df#b) r RCD(f#a>d<)
+	q85l2 RCD(fg#>c#<)q99l4RCD(ega#)
+	RCD(df#b) r q85RCD(f#a>d<)
+	#PEDALON
+	Sub{r-16RCDINIT(14,19)l2.RCD(c#g#>f<)
+	#R << #SP RMD(c#2.)
+	r1.
+	#PEDALOFF
+ 
+/////////////////////////////////////////////////////// 
+// 017.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(391:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(140,0)
+	[
+		TmpChangeR(180,!1.)
+		TmpChangeR(140,!4)
+		TmpChangeR(150,!2)
+		TmpChangeR(140,!2.)
+	]
+	TmpChangeR(30,0)
+	TmpChangeR(40,!32)
+	TmpChangeR(60,!32)
+	TmpChangeR(90,!16)
+	TmpChangeR(70,!16)
+	TmpChangeR(90,!8.)
+	TmpChangeR(80,!4)
+	TmpChangeR(190,!4^16)
+	TmpChangeR(155,0)
+	TmpChangeR(125,!8)
+	TmpChangeR(135,!8)
+	TmpChangeR(80,!1.)
+
+TR(1)
+	#TM o4 #R q100
+	#M
+	l2.RCD(>e<)l2.^2.^2.RCD(f#>f#<)
+	l2.RCD(>e<)l2.^2.^2.RCD(f#>f#<)
+	r2.
+	l2.^2.RCD(g#>e<)
+
+TR(2)
+	#TM o5 #R q100
+	#MS l4
+	#MS l2.^2.^4RMD(c#)l4 #M RMD(<b>c#edc#)
+	#MS l2.^2.^4RMD(c#)l4 #M RMD(<b>c#ed.c#8)
+	l8Sub{RMD(c#2)}RMD(l8r32a16.g#baf#d)
+	#MS RMD(c#2.) #M RMD(<b2a4>c#1.)
+
+TR(3)
+	#TM o3 #R q100
+	#P
+	Sub{l2.^2.^2.^2.RMD(a)}l2.RCD(>e)
+	l2.^2.^2.<RMD(d)
+	l2.<RCD(a>a)
+	Sub{l2.^2.^2.^2.RCD(da)}r2.^2.^2.<
+	>>l2.RMD(r)
+	<
+	Sub{l2.^2RMD(e)}>
+	RMD(e2.d2)<
+	Sub{l4^2.^2.RMD(a)}>
+	l4RMD(c#)l2.^2.RMD(e)
+ 
+/////////////////////////////////////////////////////// 
+// 018.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(405:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(150,0)
+	r2.^2.^8
+	TmpChangeR(180,0)
+	TmpChangeR(120,!2)
+	TmpChangeR(60,0)
+	r8
+	TmpChangeR(70,0)r16
+	TmpChangeR(130,0)r16
+	TmpChangeR(170,!8)
+	r8
+	TmpChangeR(185,0)
+	TmpChangeR(195,!4)
+	TmpChangeR(160,0)r8
+	TmpChangeR(210,!2^8)
+	TmpChangeR(180,!4.)
+	TmpChangeR(155,!8)r4
+	TmpChangeR(140,!4^8^8^8^8)
+	TmpChangeR(200,!8)
+	TmpChangeR(170,!2.^2.)
+	TmpChangeR(100,!2.^2.)
+
+TR(1)
+	#TM o6 #R q100
+	#PP
+	l2.^2.^8RMD(c#)
+	l8RMD(d#f#ec#<a16)r16
+	Sub{#SP #PEDALON r-16l32RMD(g#g#)}#PP >l2^8.RMD(g#)r16#PEDALOFF
+	Sub{#SP r-16l32RMD(f#g#)}#PP RMD(f#4.e8f#4)
+	RMD(g#4.a8g#8.)r16
+	Sub{#SP r-16l32RMD(f#g#)}#PP RMD(f#4.e8f#4)
+
+	#PEDALON
+	l2.^4.RMD(g#)
+	#SP<l8
+	RMD(g#>g#d#)
+	RMD(g#d#>d#<g#>d#<g#>)
+	#PEDALOFF
+	RMD(g#)
+
+TR(3)
+	#TM o4 #R q100
+	#SP
+	[3 r2.]
+	r2 l4 RCD(b>df<)
+	RCD(a>c#f#)r4RCD(c#ea)
+	l2RCD(cd#g#)l4RCD(<b>df)
+	RCD(<a>c#f#)r4RCD(c#ea)
+	#PEDALON
+	Sub{r-8 RCDINIT(12,16)<RCD(g#>d#>c)}r2.<<<<
+	l2.RMD(g#)
+	r2.
+	#PEDALOFF
+ 
+/////////////////////////////////////////////////////// 
+// 019.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(415:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(140,0)
+	TmpChangeR(190,!2.)
+	[6
+		TmpChangeR(205,0)
+		r4
+		TmpChangeR(235,!4)
+		TmpChangeR(225,!4)
+	]
+	[1
+		TmpChangeR(200,0)
+		r4
+		TmpChangeR(245,!4)
+		TmpChangeR(235,!4)
+	]
+	[1
+		TmpChangeR(200,0)
+		r4
+		TmpChangeR(190,!8)
+		TmpChangeR(180,!8.)r8.
+	]
+	[4
+		TmpChangeR(200,0)
+		r4
+		TmpChangeR(235,!4)
+		TmpChangeR(225,!4)
+	]
+	[2
+		TmpChangeR(200,0)
+		r4
+		TmpChangeR(230,!4)
+		TmpChangeR(220,!4)
+	]
+	[1
+		TmpChangeR(190,0)
+		r4
+		TmpChangeR(180,!8)
+		TmpChangeR(170,!8.)r8.
+	]
+	[1
+		TmpChangeR(170,0)
+		r4
+		TmpChangeR(150,!8)
+		TmpChangeR(155,!8.)r8.
+	]
+
+	[5
+		TmpChangeR(195,0)
+		r4
+		TmpChangeR(235,!4)
+		TmpChangeR(215,!4)
+	]
+	[1
+		TmpChangeR(175,0)
+		r4
+		TmpChangeR(155,!8)
+		TmpChangeR(160,!8.)r8.
+	]
+	[1
+		TmpChangeR(170,0)
+		r4
+		TmpChangeR(150,!8)
+		TmpChangeR(155,!8.)r8.
+	]
+	TmpChangeR(140,0)
+
+TR(1)
+	#TM o6 #R q100
+	#M
+	l4 r4 #M RMD(g#f#)
+	#PEDALON RMD(e1)#PEDALOFF
+	#PEDALON #PS RMD(ed#)#PEDALOFF
+	#PEDALON RMD(c#)r2 #PEDALOFF
+	#PEDALON #M r4 RMD(g#f#)#PEDALON
+	#PEDALON RMD(e1)#PEDALOFF
+	#PEDALON #PS RMD(ed#)#PEDALOFF
+	#PEDALON RMD(c#)r2#PEDALOFF
+	#PEDALON r4 #F >RMD(c#<b)#PEDALOFF
+	#PEDALON RMD(a1)#PEDALOFF
+	#PEDALON #M RMD(ag#)#PEDALOFF
+	#PEDALON RMD(f#)r2#PEDALOFF
+	#PEDALON #F r4>RMD(c#<b)#PEDALOFF
+	#PEDALON RMD(a1)#PEDALOFF
+	#PEDALON #MS RMD(ag#)#PEDALOFF
+	#PEDALON RMD(f#1)#aEDALOFF
+	#aEDALON #F RMD(g#a)#PEDALOFF
+	#PEDALON RMD(g#)r2#PEDALOFF
+	#PEDALON #MS r4RMD(f#e)#PEDALOFF
+	#PEDALON RMD(d#1)#PEDALOFF
+	#PEDALON RMD(d#c#)#PEDALOFF
+	#PEDALON #M RMD(c)r2#PEDALOFF
+	#PEDALON #F r4RMD(f#e)#PEDALOFF
+	#PEDALON RMD(d#)r2
+	r4#PEDALOFF #P RMD(e)#PPS q60RMD(f#)
+
+TR(2)
+	#TM o5 #R q87
+	#SP r2 r4
+	#PEDALON r4 RMD(g8g#8b12a12g#12)#PEDALOFF	
+	#PEDALON RMD(g#1)#aEDALOFF
+	[
+		#aEDALON RMD(g8g#8b12a12g#12)#PEDALOFF	
+		#PEDALON RMD(g#1)#aEDALOFF
+	]
+	[5
+		#aEDALON RMD(>c8c#8e12d12c#12)#PEDALOFF	
+		#PEDALON RMD(c#1<)#aEDALOFF
+		#PP
+	]
+	[3
+		#aEDALON RMD(g8g#8b12a12g#12)#PEDALOFF	
+		#PEDALON RMD(g#1)#aEDALOFF
+	]
+	#PS
+	#aEDALON RMD(a#8b8>d#12c#12<b12)#PEDALOFF	
+	#PEDALON RMD(b2.)#PEDALOFF
+
+TR(3)
+	#TM o5 #R q100
+	r2.#SP l4
+	Sub{
+		[24
+			#PEDALON
+			r2.
+			#PEDALOFF
+		]
+	}
+
+	r4RMD(e<g#2)
+	RMD(>c<g#2)
+	RMD(>c#<g#2)
+	RMD(>d#<g#2)
+	RMD(>e<g#2)
+	RMD(>c<g#2)
+	RMD(>c#<g#4)
+#PP	RMD(b>g#c#2)
+	RMD(f#c#2)
+	RMD(e#c#2)
+	RMD(f#c#2)
+	RMD(g#c#2)
+	RMD(ac#2)
+	RMD(e#c#2)
+	RMD(f#c#)
+	r RMD(c#<f#)
+
+	r RMD(>c<f#)
+	r RMD(>c#<g#)
+	r RMD(>c<g#)
+	r RMD(>c#<g#)
+	r RMD(>c<g#2)
+	RMD(>c#<g#)
+	Sub {
+		r4 l2^2. RMD(f#)
+	}
+	Sub {
+		r2 l4^2. RMD(a)
+	}
+	r2.
+	>RMD(d#2.)
+
+TR(4)
+	#TM o4 #R q100
+	#P
+	l2.r2 r4
+	RCD(c#)
+	RCD(d#f#)
+	RCD(e)
+	RCD(c)
+	RCD(c#)
+	RCD(d#f#)
+	RCD(e)
+#PS	RCD(e#)
+	RCD(f#a)
+	RCD(g#b)
+	RCD(a)
+	RCD(e#)
+	RCD(f#a)
+	RCD(g#b)
+	RCD(a)<
+	RCD(a)
+	RCD(g#>d#)
+	RCD(e)<
+	RCD(g#>f#)
+	RCD(e)<
+	RCD(g#>d#)
+	RCD(e)<
+	l1.RCD(b)
+ 
+/////////////////////////////////////////////////////// 
+// 020.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(440:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(240,0)
+	TmpChangeR(290,!2)
+	TmpChangeR(310,!1)
+	TmpChangeR(345,!2.^2.^2.^2.^2.^2.^2.^2.^2.^2.)
+	[2 r2.]
+	TmpChangeR(325,!2.^2.^2.^2.^2.^2.^2.^2.^2.^2.)
+	TmpChangeR(265,!2.^2.^2.^2.^2.^2.)
+	TmpChangeR(170,0)
+
+#PEDAL={
+	Sub{
+		[
+			#PEDALON r1.#PEDALOFF
+			r1.
+			[3 #PEDALON r2.#PEDALOFF]
+			r2.
+		]
+		[4
+			#PEDALON r1.#PEDALOFF
+		]
+		#PEDALON r1.r1.r1.#PEDALOFF
+	}
+}
+
+TR(1)
+	#TR #TM o5 q100
+	#PEDAL
+	#P l8
+	[
+		[RMD(g#b>eg#f#e)]
+		RMD(<bg#f#e<bg#)
+		RMD(f#e<b>g#f#e)
+		RMD(c#ef#a>c#e)
+		RMD(f#a>c#ef#a)
+		#PS
+		RMD(g#f#d#<ag#f#)
+		RMD(d#<b>d#c#<ba)
+	]
+	[
+		[RMD(g#b>eg#f#e)]
+		#MS
+		RMD(c<af#ec<a)
+		RMD(f#ec<af#e)
+	]
+
+	r4#F RMD(b>)#MS RMD(eag#)
+	RMD(b>e)#F RMD(a)#MS RMD(g#b>e)
+	RMD(ag#b>eag#)
+	#F RMD(e<)#MS RMD(bag#e<b)
+	#F RMD(a)#MS RMD(g#e<bag#)
+	#F RMD(e<)#MS RMD(bag#e<b)
+	#FFS
+	RMD(e2.)
+	r2.
+
+TR(3)
+	#TR #TM o4 q25
+	#PEDAL
+	#PPS
+	
+	[
+		l4
+		[3
+			q28
+			rRCD(b>e<)RMD(g#)
+		]
+		r2.
+		[2
+			rRCD(a>c#<)RMD(f#)
+		]
+		rl2^2.RCD(b>d#<)
+		#P
+	]
+	#P
+	l4
+	[
+		[
+			rRCD(b>e<)RMD(g#)
+			#PS
+		]
+		r1.
+	]
+
+TR(4)
+	#TR #TM o4 q95
+	#PEDAL
+	#MS
+
+	l2.
+	[
+		#MS
+		RMD(e)
+		RMD(d#)
+		RMD(c#4)r2
+		<RMD(b)
+		RMD(a)
+		RMD(f#)
+		RMD(b4)r4 #P >RMD(f#4g#4f#4g#4)
+	]
+
+	[
+		#F l2.
+		RMD(e)
+		<RMD(b)
+		#FF l4RCD(a>a<)l2RCD(>c>c<<)r2.
+	]
+
+	#SSF RMD(e2.)r2.
+	#M >>Sub{r-7 RCDINIT(8,12)RCD(eb>g#)}
+
+ 
+/////////////////////////////////////////////////////// 
+// 021.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(472:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(180,0)
+	TmpChangeR(310,!2)
+	TmpChangeR(330,!1)
+	[4 r2.]
+	TmpChangeR(250,!1)
+
+TR(1)
+	#TM #R o3q100
+	#PEDALON
+	#F l8
+	r4RMD(b>fag#)
+	RMD(b>fag#b>f)
+	RMD(ag#b>fag#)
+	RMD(f<bag#f<b)
+	RMD(ag#f<bag#)
+	RMD(f<bag#f<b)
+	#PEDALOFF
+	#PEDALON
+	#SF RMD(d2.)
+	#PEDALOFF
+
+TR(3)
+	#TM #R o2q100
+	#PEDALON
+	#SSF l2.RCD(d>d)
+	r2.
+	RCDINIT(12,18)>#FF RCD(da-b>f)#Rs
+	[5 r2.]
+	#PEDALOFF
+ 
+/////////////////////////////////////////////////////// 
+// 022.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(480:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(200,0)
+	TmpChangeR(270,!2)
+	TmpChangeR(300,!1)
+	[4 r2.]
+	TmpChangeR(310,!2.)
+	TmpChangeR(335,!2.)
+	TmpChangeR(320,!2.^2.^2.^2.^2.)
+	TmpChangeR(290,!2.)
+	TmpChangeR(280,!2.)
+	TmpChangeR(260,!2.)
+
+#PEDAL={
+	Sub {
+		[
+			[3
+				#PEDALON r1.#PEDALOFF
+			]
+			r1.
+		]
+	}
+}
+
+TR(1)
+	#TM #R o5 q100
+	l8 #F
+	#PEDAL
+
+	r4RMD(a#g#b>f)
+	RMD(a#g#b>fa#g#<)
+	RMD(a#>eg#ge<a#)
+	RMD(g#ge<a#g#g<)
+	RMD(a>d#g#f#a>d#)
+	RMD(g#f#a>d#g#f#<)
+	RMD(g>c#f#fc#<g#)
+	RMD(f#fc#<g#f#f)
+	RMD(cf#ba>cf#)
+	RMD(ba>cf#ba<)
+	RMD(b>fag#f<b)
+	RMD(ag#f<bag#)
+	RMD(<b->eagb->e)
+	RMD(agb->eag)
+	RMD(<a>dgf#d<a)
+	RMD(gf#d<agf#)
+
+	#SSF<RCD(d>gd)
+
+TR(3)
+	#TM #R o2 q90
+	#PEDAL
+	#SF
+	l4
+	RCD(c#>c#)rr
+	RCD(g#>g#)RCD(d#>d#<)RCD(c#>c#<)
+	RCD(c#>c#<<)rrRCD(c#>c#<)rr<
+
+	RCD(c#>c#)rr
+	RCD(f#>f#)RCD(d#>d#<)RCD(c#>c#<)
+	RCD(c#>c#<) #F <<RCD(g>g<)RCD(g#>g#<)
+	RCD(g#>g#)RCD(d#>d#<)RCD(c#>c#<)
+
+	#SF
+	RCD(d>d<)rr
+	RCD(a>a)RCD(e>e<)RCD(d>d<)
+	RCD(d>d<<)rr
+	RCD(d>d<<)rr
+
+	RCD(d>d)rr
+	RCD(g>g)RCD(e>e<)RCD(d>d<)
+	RCD(d>d<)
+	#MS<
+	RCD(c#>c#<)RCD(d>d<)
+	RCD(d>d<<)RCD(b>b)RCD(c>c<)
+
+	#SSF <RCD(b->b-)
+
+ 
+/////////////////////////////////////////////////////// 
+// 023.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(496:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(260,0)
+	r4
+	TmpChangeR(270,0)
+	TmpChangeR(280,!2^2.)
+	[5 r2.]
+	TmpChangeR(290,0)
+	TmpChangeR(280,!2.^4)
+	TmpChangeR(300,!2^2.)
+	TmpChangeR(310,!2.^2.)
+	TmpChangeR(300,!2.^2.)
+	TmpChangeR(275,!2.^2.^2.^2.^2.)
+	TmpChangeR(265,!2.^2.)
+	TmpChangeR(240,!2.^2.)
+	TmpChangeR(190,!2.)
+
+#PEDAL={
+	Sub{
+		[1
+			#PEDALON r2 #PEDALOFF r4
+		]
+		[23
+			#PEDALON r2^8. #PEDALOFF r16
+		]
+	}
+}
+
+TR(1)
+	#TM #R o7 l4q90
+	#F #PEDAL
+	r2.
+	rRMD(dc)
+	RMD(<b-)rr
+	<rRCD(b->b-<)#MS RCD(a>a<)
+	RCD(g>dg<)rr
+	#FS >>rRMD(dc)
+	#F RMD(<b-)rr
+	#MS rRMD(gf)
+	RMD(e-)rr>
+	#FF rRMD(gf)
+	#FS RMD(e-)rr
+	r<RCD(e->e-<)RCD(d>d<)
+	#F RCD(c>c<)rr
+	#FS rRMD(gf)
+	#F RMD(e-)rr
+	rRMD(e-d-)
+	#MS RMD(<b>)rr>
+	#FS rRMD(e-d-)<
+	#F RMD(b)rr<
+	#FS rRCD(b>b<)RCD(b->b-<)
+	#F RCD(a->a-)rr
+	#FS >rRMD(e-d-)<
+	#F RMD(b)rr<
+	#FFS rRCD(b>b<)RCD(b->b-<)
+	#PEDALON RCD(a->ea-)
+
+TR(2)
+	#TM #R o6 q96
+	#M #PEDAL l12
+	[3
+		#M r4RMD(c#8d8fe-d)
+		#PS Sub{RMD(d1)}r2.
+	]
+	#M r4<RMD(f#8g8b-a-g)
+	#PS Sub{RMD(g1)}r2.
+	>
+	[2
+		#M r4RMD(f#8g8b-a-g)
+		#PS Sub{RMD(g1)}r2.
+	]
+	#M r4<RMD(f#8g8b-a-g)
+	#PS Sub{RMD(g1)}r2.
+	#M r4RMD(d8e-8g-ee-)
+	#PS Sub{RMD(e-1)}r2.
+	>
+	[4
+		#M r4RMD(d8e-8g-ee-)
+		:
+		#PS Sub{RMD(e-1)}r2.
+	]
+	#PEDALON #PS RMD(e-2.)
+
+TR(3)
+	#TM #R o5
+	#M #PEDAL l4
+	r q100RMD(d)<q60RCD(dg)>
+	r q100RMD(d)<q60RCD(da)>
+	r q100RMD(d)<q60RCD(db-)>
+	r q100RMD(d)<q60RCD(f#a)>
+	r q100RMD(d)<q60RCD(dg)>
+	r q100RMD(d)<q60RCD(da)>
+	r q100RMD(d)<q60RMD(g)>
+	r q100RMD(d)<q60RMD(g)>
+
+	r q100RMD(e-)<q60RMD(g)>
+	r q100RMD(f)<q60RCD(gb)>
+	r q100RMD(g)<q60RCD(g>c<)>
+	r q100RMD(g)<q60RCD(gb)>
+	r q100RMD(e-)<q60RCD(g>c<)>
+	r q100RMD(d)<q60RMD(g)>
+	r q100RMD(c)<q60RCD(e-g)>
+	r q100RMD(d-)<q60RCD(e-g)>
+
+	r q100RMD(<b>)<q60RCD(e-a-)>
+	r q100RMD(e-)<q60RCD(e-b-)>
+	r q100RMD(e-)<q60RCD(e-a-b)>
+	r q100RMD(e-)<q60RCD(e-g>d-<)>
+	r q100RMD(e-)<q60RCD(e-a-b)>
+	r q100RMD(e-)<q60RCD(e-b-)>
+	r q100RMD(e-)<q60RCD(e-a-b)>
+	r q100RMD(e-)<q60RCD(e-g>d-<)>
+
+TR(4)
+	#TM #R o3 q60
+	#F #PEDAL l4
+	r2.
+	RMD(a)rr
+	RMD(g)rr>
+	q95RMD(c2.)<
+	q60RMD(b-)rr
+	RMD(a)rr
+	RMD(g)rr
+	RMD(b)rr>
+	RMD(c)rr
+	RMD(d)rr
+	RMD(e-)rr
+	q95RMD(f2.)
+	RMD(e-2.)
+	RMD(d2.)
+	RMD(c2.)<
+	RMD(b-2.)
+	q60RMD(a-)rr
+	RMD(g)rr
+	RMD(a-)rr
+	RMD(b-)rr
+	RMD(b)rr
+	RMD(g)rr
+	RMD(a-)rr
+	RMD(b-)rr
+
+	#SSF #PEDALON RCD(<b4>b4)
+ 
+/////////////////////////////////////////////////////// 
+// 024.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(520:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(240,0)
+	TmpChangeR(280,!4)
+	TmpChangeR(305,!2)
+	[5 r2.]
+	TmpChangeR(295,!2.)
+	TmpChangeR(275,0)
+	TmpChangeR(270,!2.)
+	TmpChangeR(290,!2.)
+	TmpChangeR(305,!2.)
+	[2 r2.]
+	TmpChangeR(315,0)
+	TmpChangeR(340,!1.^1.^1.^1.)
+	TmpChangeR(320,!1.)
+	TmpChangeR(270,!2.^4)
+	TmpChangeR(250,!2)
+	TmpChangeR(365,!4)
+	TmpChangeR(320,!1.^2.)
+	TmpChangeR(190,0)
+	TmpChangeR(150,!2.)
+
+TR(1)
+	#TM #R #FF o6 l8 q92
+	#PEDALON
+	r2. RMDCresc(-1)RMD(g#16>g#8.f#e<bg#)
+	RMD(f#e<bg#f#e<)
+	RMD(b4) r8 #PEDALOFF r4.
+	#M RMD(>>d#ef#g#ab)
+	RMD(>c4)r2
+	RMD(c<bag#f#e)
+	RMD(d#4)r2
+
+	#SF RMD(g#16>)l8.^2^4 #FF RMD(g#)l8
+	RMDCresc(-2)
+	RMD(f#e<bg#)
+	RMD(f#e<bg#f#e)
+	RMD(<b4>)r2
+
+	#FF >RMD(ff#g#ab>c#)
+	#F RMD(d4)r2
+	#FF RMD(dc#<bag#f#)
+	#F RMD(f4)r2
+	#FF RMD(gg#a#b>c#d#)
+	#F RMD(e4)r2
+	#FF RMD(ed#c#<ba#g#)
+	#F RMD(g4)r2
+
+	#FF RMD(ab->cdef)
+	RMD(g->e-<g-fe-d-)
+	RMD(cd-de-ef)
+	RMD(g->e-<g-fe-d-)
+	#PEDALON
+	RMD(c)r>RMD(fee-c)
+	<RMD(a4)r4
+	<RMD(fee-c<)
+	RMD(a4) #PEDALOFF r4<
+	RMD(fee-c)
+	<#SF RMD(f4)
+
+TR(3)
+	#TM #R #FF o4 l4 q90
+	#PEDALON
+	r2 RCD(g#>e) RCD(b>b)<<
+	r4 RCD(g#>e) RCD(b>b) rr
+	r4.#PEDALOFF r4.
+
+	<<<<
+	#PEDALON #F
+	RCD(b>b)rr #MS >RCD(a>cd#f#<)RCD(a>cd#g#<)RCD(a>cd#f#<)
+	RCD(a>cd#f#<)#PEDALOFF rr<<
+	#SF #PEDALON RCD(b>b<)RCD(a>a)RCD(c>c<<) #PEDALOFF
+
+	#PEDALON
+	RCD(b>b)> #FF [RCD(g#>e<)]
+	l4.RCD(b>b<)l8RCD(g#>e<)l4RCD(g#>e<)
+	RCD(b>b<)rr
+	r2#PEDALOFF r4
+
+	#PEDALON <
+	#SF RCD(d>d)rr
+	#FF RCD(b>f#g#<)RCD(b>f#a<)RCD(b>f#g#<)#PEDALOFF
+	#PEDALON RCD(b>fg#<)rr #PEDALOFF<
+	#SF RCD(d>d<)RCD(c>c<)RCD(c#>c#<)
+	#PEDALON
+	RCD(e>e)rr>
+	#FF RCD(c#g#a#)RCD(c#g#b)RCD(c#g#a#)#PEDALOFF
+	#PEDALON RCD(c#ga#)rr#PEDALOFF<<
+	#SF RCD(e>e<)RCD(d>d<)RCD(e->e-<)
+
+	#PEDALON
+	RCD(g->g-)r#FF >RCD(ca)RCD(e-a>e-<)r
+	RCD(ce-a)RCD(e-a>e-<)r #PEDALOFF
+	#PEDALON #SF [4 RCD(<g->g-)] #PEDALOFF
+	RCDINIT(28,30)
+	#PEDALON
+	#SF Sub{r-14 <RCD(f>ce-a)} r2. #R
+	>>
+	#F l8RMD(fee-c)<a4r4<
+	#PEDALOFF
+	l8RMD(fee-c)<a4r4<
+	
+ 
+/////////////////////////////////////////////////////// 
+// 025.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(548:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(240,0)
+	TmpChangeR(265,!1.)
+	TmpChangeR(280,!1.^1.^2.)
+	TmpChangeR(260,^2.^2.)
+	[7
+		TmpChangeR(235,0)
+		TmpChangeR(255,!4)
+		r2 r2.
+	]
+	TmpChangeR(230,!1.^1.^1.^2.)
+	TmpChangeR(200,0)
+	[6 r2.]
+	TmpChangeR(150,0)
+	TmpChangeR(140,!1.)
+	[1 r2.]
+	TmpChangeR(80,0)
+	TmpChangeR(50,!1.)
+
+#PEDAL={
+	Sub {
+		[8
+			#PEDALON r2. #PEDALOFF
+		]
+	}
+}
+
+#RCDINIT={RCDINIT(38,42)}
+
+TR(1)
+	#TM #R #FF o6 q100
+	#PEDAL
+	l4
+	RCD(d->d-<) rr
+	rRCD(e>e<)RCD(f>f<)
+	RCD(<b->b-) rr
+	rRCD(c>c<)RCD(d->d-<)
+	RCD(<g->g-) rr
+	r RCD(<a>a)RCD(<b->b-)
+	RCD(<e->e-) rr
+	rRCD(df)RCD(e-g-)<
+
+	#R RCD(f>ce-f<)rr
+	[
+		#RCDINIT RCD(<fb->d-f) #R >RCD(e->e-<)RCD(d->d-<)
+		#RCDINIT RCD(cfa>c<) #R rr<
+		#RCDINIT RCD(<fb->d-f) #R >RCD(c>c<<)RCD(b->b-<)
+		#RCDINIT RCD(a>cfa<)#R rr
+	]
+	RMD(f)>RCD(d->d-<)RCD(c>c<)
+	#RCDINIT RCD(<a>cfa)#R rr<
+	RMD(cb-a)
+	#RCDINIT RCD(a>cfa)#R rr<
+	RMD(f)>RCD(d->d-<)RCD(c>c<)
+
+	#RCDINIT RCD(<a>cfa)#R rr<
+	RMD(cb-a)>
+	#MS
+	#RCDINIT RCD(<a>cfa)#R rr<
+	#M
+	RMD(cb-a)>
+	#PS
+	#RCDINIT RCD(<a>cfa)#R rr<
+	#P
+	RMD(cb-a)>
+	RCD(<a>cfa)
+
+	#PP<<<
+	q95 RMD(b8>c8e-12d-12c12)
+	q60 RMD(c4b-4a4)
+	q60 RMD(f4) q95 RMD(<b8>c8e-12d-12c12)
+	q60 RMD(c4b-4a4)
+	RMD(f4)r4r4
+	r2.
+	r4 q95 RMD(<b8>c8e-12d-12c12)
+	q60 RMD(c4b-4a4)
+	RMD(f4)r4r4
+	q100
+	r4RMD(<b-4a4f2.)r2.
+
+TR(2)
+	#TM #R #FF o6 q100
+	#PEDAL
+	l4
+	#F r RMD(e8f8a-12g-12f12)
+	#FF RMD(f)rr
+	#F r RMD(c8d-8f12e-12d-12)
+	#FF RMD(d-)rr
+	#F r RMD(<a8b-8>d-12c12<b-12)
+	#FF RMD(b-) rr
+	#F r RMD(f8g-8b-12a-12g-12)
+	#FF RMD(g-)rr
+
+	#M
+	[5
+		r RMD(e8f8a-12g-12f12)
+		rrr
+	]
+
+	r RMD(<b8>c8e-12d-12c12)
+	rrr
+
+	r RMD(e8f8a-12g-12f12)
+	rrr
+
+	RMDCresc(-1)
+	[3
+		r RMD(<b8>c8e-12d-12c12)
+		rrr
+	]
+
+TR(3)
+	#TM #R #FFS o2 q100
+	l4
+	#PEDAL
+	RCD(b->b-)rr
+	RCD(a->a-<)rr
+	RCD(g->g-<)rr
+	RCD(f>f<)rr
+	RCD(e->e-<)rr
+	RCD(d->d-<)rr
+	RCD(c>c<<)rr
+	RCD(b->b-r)rr
+
+	RCD(a>cfa<)rr
+	#RCDINIT RCD(<b->b-)rr
+	[3
+		RCD(f>ca<)rr
+		RCD(<b->b-)rr
+	]
+	[
+		#RCDINIT RCD(f>ca<)rr
+		RMD(>f<)rr
+		RCD(f>ca<)rr
+		#R RCD(c>c<)rr
+	]
+	#M
+	[
+		RCD(f>ca<)rr
+		#R RCD(c>c<)rr
+		#P
+	]
+	RCD(f>cf<)<
+
+	#PP
+	q95 RMD(b8>c8e-12d-12c12)
+	q60 RMD(c4b-4a4)
+	q60 RMD(f4) q95 RMD(<b8>c8e-12d-12c12)
+	q60 RMD(c4b-4a4)
+	RMD(f4)r4r4
+	r2.
+	r4 q95 RMD(<b8>c8e-12d-12c12)
+	q60 RMD(c4b-4a4)
+	RMD(f4)r4r4
+	q100
+	r4RMD(<b-4a4f2.)r2.
+
+TR(4)
+	#TM #R #MS o4 q100
+	l4
+	#PEDAL
+	r RCD(b->b-)RCD(d-f<)
+	r RCD(a->a-)RCD(cf<)
+	r RCD(g->g-<)RCD(b->d-<)
+	r RCD(f>f<)RCD(a->d-<)
+	r RCD(e->e-<)RCD(g-b-)
+	r RCD(d->d-<)RCD(fb-)
+	r RCD(c>c<)RCD(e-g-)
+	r RCD(<b->b-)RCD(e-g-)
+
+	#M
+	[5
+		r RMD(e8f8a-12g-12f12)
+		rrr
+	]
+
+	r RMD(<b8>c8e-12d-12c12)
+	rrr
+
+	r RMD(e8f8a-12g-12f12)
+	rrr
+
+	RMDCresc(-1)
+	[3
+		r RMD(<b8>c8e-12d-12c12)
+		rrr
+	]
+ 
+/////////////////////////////////////////////////////// 
+// 026.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(588:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+
+	#tokorotentmp={
+		TmpChangeR(240,0)
+		[1 r2]
+		[
+			TmpChangeR(285,0)
+			[3 r4]
+			TmpChangeR(240,0)
+			[1 r4]
+			:
+			TmpChangeR(180,0)
+			[1 r2]
+		]
+		TmpChangeR(265,0)
+	}
+	#tokorotentmp
+	#japantmp1={
+		TmpChangeR(230,0)
+		TmpChangeR(280,!2.^2.)
+		TmpChangeR(380,!2.)
+		TmpChangeR(275,0)
+		TmpChangeR(290,!2^8)
+		TmpChangeR(270,0)
+		r8
+		TmpChangeR(310,!0)
+	}
+
+	#japantmp2={
+		TmpChangeR(290,!2.^2.)
+		TmpChangeR(250,!2.)
+		TmpChangeR(270,0)
+		TmpChangeR(250,!2^8)
+		TmpChangeR(300,0)
+		r8
+		TmpChangeR(310,!0)
+		TmpChangeR(330,!0)
+		TmpChangeR(300,!2.^2.^2.)
+		TmpChangeR(260,!2.^2.)
+		TmpChangeR(245,0)
+		[1 r2.]
+		TmpChangeR(180,0)
+		[1 r2.]
+		TmpChangeR(245,0)
+	}
+
+	#japantmp1
+
+	#tokorotentmp
+	#japantmp2
+
+	#tokorotentmp
+	#japantmp1
+
+	#tokorotentmp
+	#japantmp2
+	TmpChangeR(340,0)
+	TmpChangeR(250,!2.)
+	TmpChangeR(90,0)
+	TmpChangeR(190,!8^4)
+	TmpChangeR(260,!2^2)
+	TmpChangeR(190,!2.)
+	TmpChangeR(60,!8)
+
+TR(1)
+	#TM #R
+	o4l8q100
+	#PP
+	r2 RMD(a12b-12>d-12)
+	RMD(f)rrr<RMD(a12b-12>d-12)
+	RMD(f1.)<
+	
+	#SF
+	#PEDALON
+	RMD(b-2.)>>
+	#FFS
+	l1.RCD(b->g-b-<)
+	#FF
+	l4.RCD(e->ce-<)l8 #M RCD(f>cf<)#PEDALOFF #FF l4RCD(g->cg-<)
+	#FS l4 RCD(f>d-f<) r4 #PP<<RMD(a12b-12>d-12)
+	RMD(f4) r4 <RMD(a12b-12>d-12)
+	RMD(f1.)
+	<
+
+	#SF
+	#PEDALON RMD(a-2.) >>l1.RCD(a->fa-<)#PEDALOFF
+	#FF
+	#PEDALON l4.RCD(e->ce-<)l8 #M RCD(f>cf<)#PEDALOFF #FF l4RCD(g->cg-<) #PEDALOFF
+	#FF
+	l4 RCD(f>d-f<) <r2
+	#PEDALON l2.RCD(a>f<)< RCD(a>f<)#PEDALOFF
+	[6 r2.]
+
+	#PP
+	r2 RMD(a12b-12>d-12)
+	RMD(f8)r8r4< RMD(a12b-12>d-12)
+	RMD(f1.)
+	<
+	#SF #PEDALON RMD(b-2.)>>
+	#FFS l2.^4.RCD(b->g-b-<) l8#F RCD(e->ce-<)l4#MS RCD(e->ce-<)
+	#FS l4.RCD(e->ce-<) #F l8 RCD(f>cf<) l4#FS RCD(g->cg-<) #PEDALOFF
+	l4RCD(f>d-f<)< r4 #PP <RMD(a12b-12>d-12)
+	RMD(f8)r8 r4 <RMD(a12b-12>d-12)
+	RMD(f1.)
+	<
+	#SSF #PEDALON RMD(c4) r2>>>
+	#FFS l1.RCD(ca->c<)< #PEDALOFF
+	#FF #PEDALON l4.RCD(g>eg<)l8RCD(a->ea-<)l4RCD(b->eb-<)#PEDALOFF
+	l4RCD(a->fa-<)r2<
+	#PEDALON l2.RCD(a->cfa-<)<
+	RCD(a->cfa-<) #PEDALOFF
+	[5 r2.]
+	
+TR(3)
+	#TM #R
+	#PP
+	o3l8q100
+	r2 RMD(a12b-12>d-12)
+	RMD(f)rrr<RMD(a12b-12>d-12)
+	RMD(f1.)<
+	<
+	#PEDALON
+	#SF
+	l2.RCD(b->b-)>
+	#F
+	l1.RCD(b->ce-g-b-<)
+	#M
+	l4.RCD(b->ce-g-b-<)l8RCD(b->ce-g-b-<)l4RCD(b->ce-g-b-<)#PEDALOFF
+	l4 RCD(b->d-fb-<)<r4
+	#PP RMD(a12b-12>d-12)
+	RMD(f8)r8r4< RMD(a12b-12>d-12)
+	RMD(f1.)
+	#SF
+	<<
+	#PEDALON l2.RCD(a->a-)>
+	#FS
+	Sub{r-6 RCDINIT(10,18)RCD(a->f>d-) } r1.#R << #PEDALOFF
+	#PEDALON #MS l4.RCD(a->e-g-a-<)l8RCD(a->e-g-a-<)l4RCD(a->e-g-a-<)#PEDALOFF
+	>l4RCD(d-fa-)<r2
+	#FF #PEDALON l2.RCD(f>cf<)<RCD(f>cf<)#PEDALOFF
+	#PEDALON <l1.^4 RCD(f>f<) #PEDALOFF l4 #SF RCD(g->g-<)r4
+	r1.r2.>
+	
+	#PP r2 RMD(a12b-12>d-12)
+	RMD(f8)r8r4< RMD(a12b-12>d-12)
+	RMD(f1.)
+	<<
+	#SF#PEDALON l2.RCD(b->b-)>
+	#F l2.^4.RCD(b->ce-g-b-<)
+	#M l8 RCD(b->ce-g-b-<) l4 RCD(b->ce-g-b-<)
+	l4.RCD(b->ce-g-b-<) l8 RCD(b->ce-g-b-<) l4RCD(b->ce-g-b-<) #PEDALOFF
+	l4RCD(b->d-fb-<)< #PP r4 RMD(a12b-12>d-12)
+	RMD(f8) r8r4 <RMD(a12b-12>d-12)
+	RMD(f1.)
+	<<
+
+	#SSF
+	#PEDALON l2.RCD(c>c)>>
+	#F l1.RCD(cfa->c<)#PEDALOFF
+	#MS #PEDALON l4.RCD(ceb->c<)l8RCD(ceb->c<)l4RCD(ceb->c<)#PEDALOFF
+	l4RCD(fa->c<)r2<
+	#PEDALON l2.RCD(f>cf<)<
+	RCD(f>cf<)< #PEDALOFF
+	#FFS #PEDALON l1. RCD(e>e<) #PEDALOFF l2. #SF RCD(f>f<)
+	#PEDALON
+#a005={
+	#P
+	l16
+	RMD(de-)
+	RMDCresc(1)
+	l16[16 RMD(fe-)]
+	#SF
+	RMD(d)
+	#FFS
+	RMD(e-)
+}
+	Sub{#a005}>#a005
+	#PEDALOFF
+ 
+/////////////////////////////////////////////////////// 
+// 027.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(638:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(240,0)
+	TmpChangeR(315,!2.)
+	[6 r2.]
+	TmpChangeR(280,!4.)
+	TmpChangeR(265,!4.)
+	TmpChangeR(250,0)
+	TmpChangeR(320,!2.)
+	[4 r2.]
+	TmpChangeR(285,!2.)
+	TmpChangeR(265,!2.)
+	TmpChangeR(250,0)
+	TmpChangeR(230,!2)
+	TmpChangeR(210,!8)
+	TmpChangeR(200,!8)
+
+TR(1)
+	#TM
+	o8q92
+	#SF
+	#PEDALON l2.^4 RMD(f)
+	#FF l8 RMD(e-d-<a-)#FS RMD(f)
+	#F RMD(e-d-<a-)#M RMD(fe-d-)<
+	#P RMD(a-4)#PEDALOFF r2>
+	#M
+	#PEDALON RMD(cd-e-fg-a-) #PEDALOFF
+	RMD(a4)r2
+
+	#P
+	RMD(aa-gg-ff-)
+	RMD(e-4)r2
+
+
+	#SF o8
+	#PEDALON l2.^4 RMD(f)
+	#FF l8 RMD(e-d-<)#FS RMD(a-f)
+	#F RMD(e-d-<) #MS RMD(a-fe-d-)<
+	#P RMD(a-4)#PEDALOFF r2>
+	#PP
+	RMD(cd-e-fg-a-)
+	RMD(a4)r2
+
+	RMD(aa-gg-ff-)
+	RMD(e-4)r2
+
+TR(3)
+	#TM o2 #FF q65
+	#PEDALON
+	l4
+	RCD(d->d-)r4#F RCD(a->f)
+	RCD(f>d-)r4<<RCD(a->f)
+	RCD(f>d-)r2
+	#PEDALOFF r2.
+	<<
+	#P
+	#PEDALON RCD(a->a-)r2 #PEDALOFF
+	#PP q88 RCD(g>cg-<)q55RCD(a->cg-<)RCD(a->cg-)<
+	r2.
+	q88RCD(a>cg-<)q55RCD(a->cg-<)RCD(a->cg-<)
+
+	q65
+	o2 #FF
+	#PEDALON
+	l4
+	RCD(d->d-)r4#F RCD(a->f)
+	RCD(f>d-)r4<<RCD(a->f)
+	RCD(f>d-)r2
+	#PEDALOFF r2.
+	<<
+	#PP
+	#PEDALON RCD(a->e-g-)r2 #PEDALOFF >
+	q105l8RMD(cd-e-fg-a-)
+	RMD(a4)r2
+	<RMD(aa-gg-fe-)
+ 
+/////////////////////////////////////////////////////// 
+// 028.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(654:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(160,0)
+	TmpChangeR(220,!8)
+	TmpChangeR(295,!2.)
+	TmpChangeR(305,!4.)
+	TmpChangeR(280,!4.)
+	TmpChangeR(260,!2.^2.^2.)
+	TmpChangeR(270,!2.^2)
+	TmpChangeR(235,!2.)
+	TmpChangeR(185,!4)
+
+	TmpChangeR(280,0)
+	TmpChangeR(310,!2.)
+	TmpChangeR(230,0)
+	TmpChangeR(220,!4)
+	TmpChangeR(265,!4)
+	TmpChangeR(305,!4)
+	TmpChangeR(290,!2.^2.)
+	TmpChangeR(250,!2.)
+	TmpChangeR(275,!4)
+	TmpChangeR(265,!2.^2.)
+	TmpChangeR(250,!2)
+
+	TmpChangeR(275,0)
+	TmpChangeR(250,!2.^2.)
+	TmpChangeR(290,!2.^2.)
+	TmpChangeR(267,!2.) TmpChangeR(255,!2.)
+	TmpChangeR(270,!16) TmpChangeR(240,!2^8.)
+	TmpChangeR(270,!2.)
+	TmpChangeR(295,!2.^2.^2.) TmpChangeR(270,!2.)
+	TmpChangeR(220,!2^8) TmpChangeR(200,!8)
+	TmpChangeR(210,!8) TmpChangeR(205,!8) TmpChangeR(265,!2.^2.^2)
+	TmpChangeR(260,!2.^2.^2.^2.)
+	TmpChangeR(245,!2.^2.)
+	TmpChangeR(235,!2.)
+	TmpChangeR(255,!2.)
+	TmpChangeR(285,!2.^2.^2.^2.)
+	TmpChangeR(295,!2.^2.)
+	TmpChangeR(305,!2.^2.^2.^2.^2.^2.)
+	TmpChangeR(310,!2.^2.^2.^2.)
+	TmpChangeR(250,!2.^4^2.^2.)
+
+
+TR(1)
+	o6#TMq100
+	#R #M
+	#PEDALON RMD(f1e-4.d-8)#PEDALOFF
+	#PEDALON RMD(d-2.)#PEDALOFF #PEDALON l2.^2RMD(g-f4)#PEDALOFF #PEDALON RMD(f4e-4d-4) #PEDALOFF
+	#PEDALON RMD(b-2.)#PEDALOFF
+	#F #PEDALON RMD(b-2b-4)#PEDALOFF
+	#PEDALON RMD(b-2e-4)#PEDALOFF
+	#PEDALON #PS RMD(e-8.) r16  Sub{r-18 #SP RMD(f34g34)}#F RMD(f4.e-8)#PEDALOFF
+	#PEDALON RMD(e-2.)#PEDALOFF
+	#FF #PEDALON RMD(a-1) #F RMD(g4f4)#PEDALOFF
+	#M #PEDALON RMD(g4f4.e-8) #PEDALOFF >
+	#FF #PEDALON RMD(c2.)#PEDALOFF
+	#F #PEDALON RMD(c2c4)#PEDALOFF
+
+	#F #PEDALON RMD(c1)<RMD(b-4.a-8)#PEDALOFF
+	#PEDALON RMD(a-2.)#PEDALOFF
+	#PEDALON >RMD(d-2.)#PEDALOFF
+	#PEDALON RMD(d-2c4)#PEDALOFF
+	#PEDALON RMD(c4<b-4.a-8)#PEDALOFF
+	#FF #PEDALON >RMD(f2.)#PEDALOFF
+	#F #PEDALON RMD(f2f4)#PEDALOFF
+	#PEDALON RMD(f2.)#PEDALOFF
+	#PEDALON RMD(e-4d-4<b-4)#PEDALOFF
+	#PEDALON >RMD(c2.)#PEDALOFF
+	#PEDALON <RMD(b-4a-4f4)#PEDALOFF
+	#PEDALON RMD(b-4a-4g-8.r16)#PEDALOFF
+	#PEDALON #P Sub{r-18 RMD(g-34a-34)}#M RMD(g-4f4.e8)#PEDALOFF
+	#PEDALON RMD(e2.)#PEDALOFF
+	#PEDALON RMD(f2)Sub{RMD(a-1)}r4#PEDALOFF
+
+
+
+	#PEDALON #M Sub{l2 RCD(<a-2>a-2)RMD(c2)}r2.#MS #PEDALOFF
+	#PEDALON RMD(>c4<)<l4.RCD(b->b-<)l8RCD(a->a-<)#PEDALOFF
+	#PEDALON l2.RCD(a->a-<)#PEDALOFF
+	#PEDALON l2.>RCD(d-a->d-<)#PEDALOFF
+	#PEDALON #F l4.RCD(d-g-a->d-<)#MS l8RCD(cg-a->c<)l4RCD(cg-a->c<)#PEDALOFF
+	#PEDALON l4.RCD(c>c<)l8RCD(<b->b-)l4RCD(<a->a-)#PEDALOFF
+	#FF #PEDALON l2.RCD(fa->f<)#PEDALOFF
+	#PEDALON l2RCD(fa->f<)#F l4RCD(fa->f<)#PEDALOFF
+	#FF #PEDALON l2.RCD(fa->f<)#PEDALOFF
+	#F #PEDALON l4RCD(e-g->e-<)l4.RCD(d-g->d-<)l8RCD(<b->g-b-)#PEDALOFF
+	#PEDALON l2.RCD(ca->c<)#PEDALOFF
+	#PEDALON l4RCD(<b->g-b-)RCD(<a->fa-)RCD(<b->fb-)#PEDALOFF
+	#FF #PEDALON l2RCD(<b>fb)l4RCD(<b->fb-<)#PEDALOFF
+	#PEDALON l2.^2RCD(b>fb<)l4RCD(b->fb-<)#PEDALOFF
+	#PEDALON l4RCD(b>fb<)RCD(b->fb-<)RCD(b>fb<)#PEDALOFF
+	#PEDALON l2RCD(b>g-b<)l4RCD(b->g-b-<)>#PEDALOFF
+
+	#PEDALON l2.^2RCD(d-g>d-<)l4RCD(cg>c<)#PEDALOFF
+	#PEDALON RCD(d-g>d-<)RCD(cg>c<)RCD(d-g>d-<)#PEDALOFF
+	#PEDALON l2RCD(d-a->d-<)l4RCD(ca->c<)#PEDALOFF
+	#PEDALON l2RCD(e-a>e-<)l4RCD(e-a>e-<)#PEDALOFF
+	#PEDALON l2RCD(e-a->e-<)l4RCD(da->d<)#PEDALOFF
+	#PEDALON l2RCD(fa->f<)l4RCD(fa->f<)#PEDALOFF
+	#PEDALON l2RCD(fb->f<)l4RCD(eb->e<)#PEDALOFF
+	#PEDALON l2RCD(g>dg<)l4RCD(g>dg<)#PEDALOFF
+	#PEDALON l2RCD(g>cg<)l4RCD(a->ca-<)#PEDALOFF
+	#PEDALON l2RCD(a>ca<)l4RCD(cg->c<)#PEDALOFF
+
+TR(2)
+	o5 #PPS #TM q100
+	#PEDALON RMD(b1.)#PEDALOFF
+	#PEDALON RMD(b2.)#PEDALOFF
+	#PEDALON RMD(b-2.)#PEDALOFF
+	#PEDALON RMD(b1.)#PEDALOFF
+	#PEDALON l2.RCD(b->d-<)#PEDALOFF
+	#PEDALON RCD(a->d-<)
+	Sub{r-18 RMD(g34>d-34)}r1.#PEDALOFF
+	#PEDALON RMD(d-2.)#PEDALOFF
+	#PEDALON RMD(c2.)#PEDALOFF
+	#PEDALON RMD(d-1.)#PEDALOFF
+	#PEDALON RMD(c1.)#PEDALOFF
+
+TR(3)
+	#TM #R o4 q95
+	#PP l8
+	#PEDALON RMD(d-a->d-fd-<a-) #aEDALOFF
+	#aEDALON RMD(d-b>d-fd-<b) #PEDALOFF
+	#PEDALON RMD(g-b>d-g-d-<b) #PEDALOFF
+	#PEDALON RMD(d-b->d-g-d-<b-) #PEDALOFF
+	#PEDALON RMD(a-b>d-a-d-<b)#PEDALOFF
+	#PEDALON RMD(d-b>d-fd-<b) #PEDALOFF
+	#PEDALON RMD(g-b->d-g-d-<b-)#PEDALOFF
+	#PEDALON RMD(f-b->d-a-d-<b-)#PEDALOFF
+	#PEDALON RMD(e-b->d-gd-<b-)#PEDALOFF
+	#PEDALON RMD(g>d-e-b-e-d-<)#PEDALOFF
+	#PEDALON RMD(a->d-e-a-e-d-<)#PEDALOFF
+	#PEDALON RMD(e->ce-a-e-c<)#PEDALOFF
+	#PEDALON RMD(b->d-e-b-e-d-<)#PEDALOFF
+	#PEDALON RMD(e->d-e-ge-d-<)#PEDALOFF
+	#PEDALON RMD(a->ce-a-e-c<)#PEDALOFF
+	#PEDALON RMD(ga->ce-c<a-)#PEDALOFF
+	#PEDALON RMD(g-a->ce-c<a-)#aEDALOFF
+	#aEDALON RMD(g-a->ce-c<a-)#PEDALOFF
+	#PEDALON RMD(fa->d-fd-<a-)#aEDALOFF
+	#aEDALON RMD(fa->d-a-d-<a-)#PEDALOFF
+	#PEDALON RMD(e-a->cg-c<a-)#PEDALOFF
+	#PEDALON RMD(e-a->cg-c<a-)#PEDALOFF
+	#PEDALON RMD(da-b>f<ba-)#PEDALOFF
+	#PEDALON RMD(da-b->f<b-a-)#PEDALOFF
+	#PEDALON RMD(e-g-b->e-<b-g-)#PEDALOFF
+	#PEDALON RMD(<g->g-b->e-<b-g-)#PEDALOFF
+	#PEDALON RMD(<a->fa->d-<a-f)#PEDALOFF
+	#PEDALON RMD(<a->fa->d-<a-f)#PEDALOFF
+	#PEDALON RMD(<a->g-a->c<a-g-)#PEDALOFF
+	#PEDALON RMD(<a->g-a->c<a-g-)#PEDALOFF
+	#PEDALON RMD(d-a->d-fd-<b-)#PEDALOFF
+	#PEDALON RMD(a->d-fa-fd-<)#PEDALOFF
+
+	#P
+	#PEDALON RMD(g-a->ce-c<a-)#aEDALOFF
+	#aEDALON RMD(g-a->ce-c<a-)#PEDALOFF
+	#PEDALON RMD(fa->d-fd-<a-)#aEDALOFF
+	#PEDALON RMD(fa->d-a-d-<a-)#PEDALOFF
+	#PEDALON RMD(e-a->cg-c<a-)#PEDALOFF
+	#PEDALON RMD(e-a->cg-c<a-)#PEDALOFF
+	#PEDALON RMD(da-b>f<ba-)#PEDALOFF
+	#PEDALON RMD(da-b->f<b-a-)#PEDALOFF
+	#PEDALON RMD(e-g-b->e-<b-g-)#PEDALOFF
+	#M
+	#PEDALON RMD(<g->g-b->e-<b-g-)#PEDALOFF
+	#PEDALON RMD(<a->fa->d-<a-f)#PEDALOFF
+	#PEDALON RMD(<a->fa->d-<a-f)#PEDALOFF
+	#PEDALON RMD(<a->fa->d<a-f)#PEDALOFF
+	#PEDALON RMD(<a->fa->d<a-f)#aEDALOFF
+	#aEDALON RMD(<a->fa->d<a-f)#aEDALOFF
+	#PEDALON RMD(<a->fa->d<a-f)#PEDALOFF
+	#PEDALON RMD(<a->e-g->e-<g-e-)#PEDALOFF
+	#PEDALON RMD(<a->eg>e<ge)#PEDALOFF
+	#PEDALON RMD(<a->eg>e<ge)#PEDALOFF
+	#PEDALON RMD(<a->eg>e<ge)#PEDALOFF
+	#PEDALON RMD(<a->fa->f<a-f)#PEDALOFF
+	#PEDALON RMD(<a->e-g->c<g-e-)#PEDALOFF
+	#PEDALON RMD(<a-b>fbf<b>)#PEDALOFF
+	#PEDALON RMD(<a->fa->d<a-f)#PEDALOFF
+	#PEDALON RMD(<a->d-g>d-<gd-)#PEDALOFF
+	#PEDALON RMD(<a->eb->e<b-e)#PEDALOFF
+	#PEDALON RMD(<a->e-g->e-<g-e-)#PEDALOFF
+	#PEDALON RMD(<a->e-g->c<g-e-)#PEDALOFF
+ 
+/////////////////////////////////////////////////////// 
+// 029.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(714:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	TmpChangeR(260,0)
+	TmpChangeR(340,!2.)
+	TmpChangeR(330,!2.^2.^2.^2.^2.^2.)
+	TmpChangeR(280,!4.)
+	TmpChangeR(220,!4.)
+	TmpChangeR(40,0)
+
+TR(1)
+	#TM #R q100 o6
+	#FF
+	#PEDALON l4RCD(d-f>d-<)r2<
+	l8 RMD(f>d-a-f>d-b-) #PEDALOFF
+	#SF #PEDALON l4RCD(ca-)r2<<
+	#FF l8 RMD(g->ca-g->ca-) #PEDALOFF
+	#SF #PEDALON l4RCD(d-f)r2<<
+	#FF l8 RMD(f>d-a-f>d-b-) #PEDALOFF
+	#SF #PEDALON l4RCD(ca-)r2<<
+	#FF l8 RMD(g->ca-g->ca-) #PEDALOFF
+
+TR(3)
+	#TM #R q100 o2
+	#SF #PEDALON >RMD(d-4)r4 #FS l8RMD(a->f)>
+	RMD(d-4)r2 #PEDALOFF<<<
+	#SF #PEDALON RMD(a-4)r4 >l8 #FS RMD(a->e-)>
+	RMD(c4)r2 #PEDALOFF<<
+	#SF #PEDALON RMD(d-4)r4  l8 #FS RMD(a->f)>
+	RMD(d-4)r2 #PEDALOFF<<<
+	#SF #PEDALON RMD(a-4)r4 >l8 #FS RMD(a->e-)>
+	RMD(c4)r2 #PEDALOFF<<<
+ 
+/////////////////////////////////////////////////////// 
+// 030.mml 
+/////////////////////////////////////////////////////// 
+#TM={Time(722:1:1)} 
+ 
+拍子 3,4
+
+TR(16)
+	#TM
+	Sub {
+		TmpChangeR(260,0)
+		TmpChangeR(330,!2.)
+		TmpChangeR(340,!1.^1.^1.)
+		TmpChangeR(290,!2.)
+		TmpChangeR(340,!2.)
+		TmpChangeR(375,!1.^1.)
+		TmpChangeR(340,!1.)
+		TmpChangeR(200,!2.)
+		TmpChangeR(270,0)
+	}
+	[16 r2.]r2
+	[
+		[3
+			TmpChangeR(370,0)
+			r4
+			TmpChangeR(500,0)
+			r2
+		]
+		TmpChangeR(390,0)
+		[2 r2.]
+		TmpChangeR(360,0)
+		[2 r2.]
+	]
+	TmpChangeR(370,0)
+	TmpChangeR(450,!1.^1.^1.^2.^2)
+	TmpChangeR(280,!1)
+	TmpChangeR(380,!2.)
+	TmpChangeR(410,!1.^2.)
+	TmpChangeR(430,!1.^1.)
+	TmpChangeR(480,!1.^1.)
+	TmpChangeR(440,!1.)
+	TmpChangeR(350,0)
+	r1.
+	TmpChangeR(370,0)
+	TmpChangeR(290,!1.^1.)
+	TmpChangeR(250,!1.^1.)
+	TmpChangeR(130,0)
+	r4r16
+	TmpChangeR(30,0)
+	r32
+	TmpChangeR(320,0)
+	TmpChangeR(420,!2)
+	TmpChangeR(500,!2)
+	TmpChangeR(120,!2)
+
+#PEDAL={
+	Sub{
+		[
+			[3 #PEDALON r4 #PEDALOFF]
+			#PEDALON r2.#PEDALOFF
+			r2.
+			#PEDALON r2 #PEDALOFF #PEDALON r4 #PEDALOFF
+		]
+		#PEDALON r1 #PEDALOFF
+		[6 #PEDALON r2.#PEDALOFF]
+		#PEDALON r2.r4 #PEDALOFF r4
+
+		[3 r2.]
+		#PEDALON r1.r4 #PEDALOFF
+		[6 #PEDALON r4 #PEDALOFF]
+		[3 r2.]r2
+
+		#PEDALON r1.r4 #PEDALOFF
+		[5 #PEDALON r4 #PEDALOFF]
+
+		[8 #PEDALON r2 #PEDALOFF #PEDALON r4 #PEDALOFF]
+
+		[
+			#PEDALON r4 #PEDALOFF r2
+			r1.
+			#PEDALON r2 #PEDALOFF #PEDALON r4 #PEDALOFF
+		]
+		[8 r2.]
+
+		[4 #PEDALON r2. #PEDALOFF]
+		#PEDALON [8 r2.] #PEDALOFF
+	}
+}
+
+TR(1)
+	#TM #R o7 l8 q99
+	#PEDAL #FFS
+	[
+		l8
+		#SF Sub{r-16 RMD(c#16)}>RMD(c#4)<RMDCresc(-1)RMD(baec#<)
+		RMD(baec#<ba)
+		RMD(ec#<baer)
+		l2 #SF RCD(f>f<)l4 #FF RCD(e>e<)>>>
+	]
+	l8<<<
+	RCD(f>f<)r#MS RMD(fa>d-f)
+	>RCD(d-f)r<<RMDCresc(2)RMD(fa>d-f)
+	>RCD(d-f)r<<RMD(fb->d-f)
+	>RCD(df)r<<RMD(fb->df)
+	>RCD(df)r<<RMD(g-b->dg-)
+	>RCD(dg-)r<<RMD(g-b->e-g-)
+	>RCD(e-g-)r<<RMD(g>d-eg)
+	>RCD(eg)r<<Sub{rrrRMD(>>a-4.<<)}>RMD(a->d-fr)
+
+	l4 >#SF RCD(d-fa-) r4 <<#MS l12 RMD(cd-f)
+	RMD(a-4)r4RMD(<b>cf)
+	RMD(a-4)r4RMD(<ab->f)
+	RMD(a-4)r2
+	#SF<RMD(a-4)r2
+	>>#FF l2.^4 RCD(a->fa-<)
+	l4 RCD(a->e-a-<)RCD(a->fa-<)
+	l4 RCD(a->e-a-<)RCD(a->fa-<)RCD(a->e-a-<)
+	RCD(a->d-fa-<)<
+
+	l4 >r4 <l12 #MS RMD(cd-f)
+	RMD(a-4)r4RMD(<b>cf)
+	RMD(a-4)r4RMD(<ab->f)
+	RMD(a-4)r2
+	#SF <RMD(a-4)r2
+	>>#F l2.^4 RCD(a->fa-<)
+	l4 RCD(a->e-a-<)RCD(a->fa-<)
+	l4 RCD(a->e-a-<)RCD(a->fa-<)RCD(a->e-a-<)
+
+	#MS Sub{l2.RCD(a->a-<)}>RMDCresc(-10)RMD(f2e-4)<
+	#F Sub{l2.RCD(a>a<)}>RMDCresc(-10)RMD(f2e-4)<
+	#MS Sub{l2.RCD(a>a<)}>RMDCresc(-9)RMD(f2e-4)<
+	#FS Sub{l2.RCD(b->b-<)}>RMDCresc(-9)RMD(g-2e4)<
+	#F Sub{l2.RCD(b->b-<)}>RMDCresc(-9)RMD(g-2e4)<
+	#FF Sub{l2.RCD(b>b<)}>RMDCresc(-8)RMD(g2f4)<
+	#FS Sub{l2.RCD(b>b<)}>RMDCresc(-8)RMD(g2f4)<
+	#FFS Sub{l2.RCD(>c>c<<)}>RMDCresc(-5)RMD(a-2g-4)>
+
+	[#FF l8
+		#SF RMD(f4)#FF RMDCresc(-1)RMD(e-d-<a-f)
+		RMD(e-d-<a-fe-d-)
+		RMD(<a-fe-d-<a-4)>
+		#FF Sub{l2.RMD(f2,)}l2RCD(<a>a)#F l4RCD(<a->a-)>>>
+	]
+	l4<<<<
+	[3
+		#SF l4q80RCD(a->fa-<)rr
+		l2q100RCD(a>a<)#F l4q80RCD(a->a-<)
+	]
+	#FS q65[3 RCD(a>fa<)RCD(a->fa-<) #FF]
+	l2.q100
+	#SF
+	RCD(a>fa<)
+	RCD(>ceb->c<)
+	RCD(a>cfa<)
+	RCD(g-a->ce-g-a-<)
+	l2.
+	RCD(fa->d-f<)r2.<
+	RCD(fa->d-f<)r2.>
+	#F RCDINIT(46,56)l8RCD(d->a-d-)>>#SSF RMD(f2.)
+	// ↓最後途切れ防止
+	[8 r2.] v1o1d-2.
+
+TR(3)
+	#TM #R o2 l4 q99
+	#PEDAL
+	[
+		#SF q85
+		l4 RCD(a>a)RCD(d#>d#<)RCD(e>e<)
+		l2.RCD(e>e<)
+		q50l4rRMD(d#e)<
+		q100l2RCD(a>f<)#F q50l4RCD(a>e<)
+	]
+	l4
+	#FF
+	q50RCD(a>f<)rq100RCD(a>a<)
+	q50RCD(>f>f<<)rq100RCD(a>a<)
+	q50RCD(>f>f<<)rq100RCD(b->b-<)
+	q50RCD(>f>f<<)rq100RCD(b->b-<)
+	q50RCD(>f>f<<)rq100RCD(b->b-<)
+	q50RCD(>g->g-<<)rq100RCD(b->b-<)
+	q50RCD(>g->g-<<)rq100RCD(a>a<)
+	q50RCD(>a>a<<)rq100RCD(a->a-<)
+	#SF q50RCD(>>fa->d-f<)
+
+	#FS q99
+	l4 >r4 <l12 #MS RMD(cd-f)
+	RMD(a-4)r4RMD(<b>cf)
+	RMD(a-4)r4RMD(<ab->f)
+	RMD(a-4)r2<
+	#SF <l4RCD(a-4>a-4)r2>>
+	#F l2.^4RCD(g->cf<)
+	l4RCD(g->ce-<)RCD(g->cf<)
+	RCD(g->ce-<)RCD(g->cf<)RCD(g->ce-<)
+	RCD(fa->d-f<)<
+	l4 >r4 <l12 #MS RMD(cd-f)
+	RMD(a-4)r4RMD(<b>cf)
+	RMD(a-4)r4RMD(<ab->f)
+	RMD(a-4)r2<
+	#SF<l4RCD(a-4>a-4)r2>>
+	#F l2.^4RCD(g->cf<)
+	l4RCD(g->ce-<)RCD(g->cf<)
+	RCD(g->ce-<)RCD(g->cf<)RCD(g->ce-<)
+
+	#MS Sub{l2.RCD(g->c<)}>RMDCresc(-10)RMD(f2e-4)<
+	#F Sub{l2.RCD(g->c<)}>RMDCresc(-10)RMD(f2e-4)<
+	#MS Sub{l2.RCD(g->c<)}>RMDCresc(-10)RMD(f2e-4)<
+	#FS Sub{l2.RCD(g>d-<)}>RMDCresc(-10)RMD(g-2e4)<
+	#F Sub{l2.RCD(g>d-<)}>RMDCresc(-10)RMD(g-2e4)<
+	#FF Sub{l2.RCD(a->d<)}>RMDCresc(-10)RMD(g2f4)<
+	#FS Sub{l2.RCD(a->d<)}>RMDCresc(-10)RMD(g2f4)<
+	#FFS Sub{l2.RCD(a->e-<)}>RMDCresc(-10)RMD(a-2g-4)<<<
+
+	[
+		q77 #SSF l4RCD(d->d-<)#FF RMD(ga-)
+		RMD(a-)RCD(g->g-<)RCD(f>f<)
+		RCD(f>f<)RMD(ga-)#SF q100RMD(a2)#FS q60RMD(a-)
+	]
+	[3
+		#SSF RCD(d->d-<)#F RMD(ga-)
+		#FF rRCD(g->g-<)#FS RCD(f>f<)
+	]
+	#SF q65[3 RCD(d-a)RCD(d-a-) #FFS]
+	l2.q100
+	#SF
+	RCD(ca)
+	RCD(cg>c<)
+	RCD(f>cf<)
+	RCD(a->e-a-<)
+	l2.
+	>RCD(d-a->d-<<)r2.
+	RCD(d-a->d-<)r2.
+	#SF RCDINIT(46,56)>l8RCD(d-a->f<)<<#R #SSF l2.RCD(d->d-)
+
+End 
+ 
+/////////////////////////////////////////////////////// 
+// tokoroten.cfg 
+/////////////////////////////////////////////////////// 
+ 
+##############################################################################
+# Tokoroten
+# by @nanakochi123456
+
+#
+# TiMidiTy Config (v2.0)
+
+dir c:/timidity++/patches/sf2_part/Piano/Steinway-D-274-master/Steinway-D-274-master/KSP-Reborn/Presets
+dir c:/timidity++/patches/sf2_part/Piano/Keppy
+dir c:/timidity++/patches/sf2_part/Piano
+
+soundfont "Timbres Of Heaven GM_GS_XG_SFX V 2.0.2.sf2"
+
+bank 0
+#	0 %font "Keppy's Yamaha C7.sf2" 0 0 amp=128
+	0 %font "Steinway D-274 Classic.sfz" 0 0 amp=128
+
+ 
+/////////////////////////////////////////////////////// 
+// 7zip + base64 files (work files)
+/////////////////////////////////////////////////////// 
+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
